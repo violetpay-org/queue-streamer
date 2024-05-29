@@ -27,4 +27,10 @@ go.work
 .DS_Store
 
 venv
+
+# IntelliJ
 .idea
+*.iws
+*.iml
+*.ipr
+out/
