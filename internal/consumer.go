@@ -6,20 +6,22 @@ import (
 	"github.com/violetpay-org/queue-streamer/shared"
 )
 
+// StreamConsumer is a consumer that consumes messages from a Kafka topic and produces them to other topics.
+// It implements the sarama.ConsumerGroupHandler interface.
 type StreamConsumer struct {
 	groupId      string
 	conn         sarama.Client
 	producerPool *producerPool
-	destination  shared.Topic
-	ms           shared.MessageSerializer
+	destinations []shared.Topic
+	mss          []shared.MessageSerializer
 }
 
-func NewStreamConsumer(ms shared.MessageSerializer, destination shared.Topic, groupId string, conn sarama.Client) *StreamConsumer {
+func NewStreamConsumer(destinations []shared.Topic, messageSerializers []shared.MessageSerializer, groupId string, conn sarama.Client) *StreamConsumer {
 	return &StreamConsumer{
 		groupId:      groupId,
 		producerPool: newProducerPool(conn),
-		destination:  destination,
-		ms:           ms,
+		destinations: destinations,
+		mss:          messageSerializers,
 	}
 }
 
@@ -58,12 +60,16 @@ func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 					return
 				}
 
-				// Produce the message
-				producer.Input() <- &sarama.ProducerMessage{
-					Topic: consumer.destination.Name(),
-					Value: sarama.ByteEncoder(
-						consumer.ms.MessageToProduceMessage(string(msg.Value)),
-					),
+				for i, destination := range consumer.destinations {
+					// Produce the message
+					producer.Input() <- &sarama.ProducerMessage{
+						Topic: destination.Name(),
+						Value: sarama.ByteEncoder(
+							consumer.mss[i].MessageToProduceMessage(string(msg.Value)),
+						),
+					}
+
+					fmt.Println("Message produced:", destination.Name(), msg.Key, msg.Value)
 				}
 
 				// Add the message to the transaction
@@ -87,7 +93,6 @@ func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 				}
 
 				fmt.Println("Message claimed:", msg.Topic, msg.Partition, msg.Offset)
-				fmt.Println("Message produced:", consumer.destination.Name(), msg.Key, msg.Value)
 			}()
 		case <-session.Context().Done():
 			return nil

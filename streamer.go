@@ -11,7 +11,7 @@ import (
 
 type TopicStreamer struct {
 	topic   shared.Topic
-	specs   []StreamConfig
+	configs []StreamConfig
 	cancels map[StreamConfig]context.CancelFunc
 	conn    sarama.Client
 }
@@ -30,21 +30,37 @@ func NewTopicStreamer(brokers []string, topic shared.Topic) *TopicStreamer {
 }
 
 func (ts *TopicStreamer) AddConfig(spec StreamConfig) {
-	ts.specs = append(ts.specs, spec)
+	ts.configs = append(ts.configs, spec)
 }
 
 func (ts *TopicStreamer) Run() {
-	for _, spec := range ts.specs {
-		fmt.Println("Running spec")
-		ts.run(ts.topic, spec.MessageSerializer(), spec.Topic(), "group")
+	dests := make([]shared.Topic, 0)
+	mss := make([]shared.MessageSerializer, 0)
+	for _, config := range ts.configs {
+		dests = append(dests, config.Topic())
+		mss = append(mss, config.MessageSerializer())
 	}
+
+	ts.run(ts.topic, dests, mss, "group")
 }
 
 // run starts one goroutine for each stream spec
-func (ts *TopicStreamer) run(origin shared.Topic, ms shared.MessageSerializer, destination shared.Topic, groupId string) context.CancelFunc {
+func (ts *TopicStreamer) run(origin shared.Topic, destinations []shared.Topic, messageSerializers []shared.MessageSerializer, groupId string) context.CancelFunc {
+	if destinations == nil || len(destinations) == 0 {
+		panic("No destinations")
+	}
+
+	if messageSerializers == nil || len(messageSerializers) == 0 {
+		panic("No message serializers")
+	}
+
+	if len(messageSerializers) != len(destinations) {
+		panic("Number of message serializers must match number of destinations")
+	}
+
 	consumer := internal.NewStreamConsumer(
-		ms,
-		destination,
+		destinations,
+		messageSerializers,
 		groupId,
 		ts.conn,
 	)
@@ -55,7 +71,7 @@ func (ts *TopicStreamer) run(origin shared.Topic, ms shared.MessageSerializer, d
 		panic(err)
 	}
 
-	fmt.Println("Running consumer", origin.Name(), destination.Name())
+	fmt.Println("Running consumer", origin.Name(), destinations)
 
 	go func() {
 		fmt.Println("goroutine")
