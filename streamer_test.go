@@ -18,10 +18,12 @@ func NewTestSerializer() *TestSerializer {
 }
 
 func TestTopicStreamer(t *testing.T) {
-	brokers := []string{"localhost:9092"}
+	brokers := []string{"b-3.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-2.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-1.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092"}
 	endTopic := qstreamer.NewTopic("te", 3)
+	endTopic2 := qstreamer.NewTopic("te2", 5)
 	serializer := NewTestSerializer()
 	spec := qstreamer.NewStreamConfig(serializer, endTopic)
+	spcc2 := qstreamer.NewStreamConfig(serializer, endTopic2)
 
 	topicStreamer := qstreamer.NewTopicStreamer(brokers,
 		qstreamer.NewTopic(
@@ -29,8 +31,10 @@ func TestTopicStreamer(t *testing.T) {
 		),
 	)
 	topicStreamer.AddConfig(spec)
+	topicStreamer.AddConfig(spcc2)
 
 	topicStreamer.Run()
 	defer topicStreamer.StopAll()
-	time.Sleep(1200 * time.Second)
+	time.Sleep(1000 * time.Second)
+	topicStreamer.StopAll()
 }
