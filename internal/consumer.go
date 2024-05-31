@@ -27,16 +27,20 @@ type StreamConsumer struct {
 }
 
 func NewStreamConsumer(
-	origin shared.Topic, dests []shared.Topic, serializers []shared.MessageSerializer, groupId string,
+	origin shared.Topic, groupId string,
 	brokers []string, config *sarama.Config, producerConfig *sarama.Config,
 ) *StreamConsumer {
+	if producerConfig == nil {
+		producerConfig = sarama.NewConfig()
+	}
+
+	if config == nil {
+		config = sarama.NewConfig()
+	}
+
 	// producerConfigProvider is for transactional producer.
 	producerConfigProvider := func() *sarama.Config {
-		var pcfg *sarama.Config
-		pcfg = producerConfig
-		if pcfg == nil {
-			pcfg = sarama.NewConfig()
-		}
+		pcfg := producerConfig
 
 		// override the configuration
 		pcfg.Net.MaxOpenRequests = 1
@@ -55,10 +59,6 @@ func NewStreamConsumer(
 		return pcfg
 	}
 
-	if config == nil {
-		config = sarama.NewConfig()
-	}
-
 	// override the configuration
 	config.Consumer.Offsets.AutoCommit.Enable = false
 
@@ -66,11 +66,16 @@ func NewStreamConsumer(
 		groupId:      groupId,
 		producerPool: newProducerPool(brokers, producerConfigProvider),
 		origin:       origin,
-		dests:        dests,
-		mss:          serializers,
+		dests:        make([]shared.Topic, 0),
+		mss:          make([]shared.MessageSerializer, 0),
 		brokers:      brokers,
 		config:       config,
 	}
+}
+
+func (consumer *StreamConsumer) AddDestination(dest shared.Topic, serializer shared.MessageSerializer) {
+	consumer.dests = append(consumer.dests, dest)
+	consumer.mss = append(consumer.mss, serializer)
 }
 
 func (consumer *StreamConsumer) StartAsGroup(ctx context.Context) {

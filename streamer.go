@@ -13,10 +13,7 @@ type TopicStreamer struct {
 	configs []StreamConfig
 	cancels map[StreamConfig]context.CancelFunc
 
-	// For kafka
-	brokers        []string
-	consumerConfig *sarama.Config
-	producerConfig *sarama.Config
+	consumer *internal.StreamConsumer
 }
 
 // NewTopicStreamer creates a new topic streamer that streams messages from a topic to other topics.
@@ -47,12 +44,19 @@ func NewTopicStreamer(brokers []string, topic shared.Topic, args ...interface{})
 		pcfg = nil
 	}
 
+	consumer := internal.NewStreamConsumer(
+		topic,
+		"groupId",
+		brokers,
+		ccfg,
+		pcfg,
+	)
+
 	return &TopicStreamer{
-		topic:          topic,
-		cancels:        make(map[StreamConfig]context.CancelFunc),
-		brokers:        brokers,
-		consumerConfig: ccfg,
-		producerConfig: pcfg,
+		topic:    topic,
+		configs:  make([]StreamConfig, 0),
+		cancels:  make(map[StreamConfig]context.CancelFunc),
+		consumer: consumer,
 	}
 }
 
@@ -68,11 +72,10 @@ func (ts *TopicStreamer) Run() {
 		mss = append(mss, config.MessageSerializer())
 	}
 
-	ts.run(ts.topic, dests, mss, "group")
+	ts.run(dests, mss)
 }
 
-// run starts one goroutine for each stream spec
-func (ts *TopicStreamer) run(origin shared.Topic, dests []shared.Topic, serializers []shared.MessageSerializer, groupId string) context.CancelFunc {
+func (ts *TopicStreamer) run(dests []shared.Topic, serializers []shared.MessageSerializer) context.CancelFunc {
 	if dests == nil || len(dests) == 0 {
 		panic("No dests")
 	}
@@ -85,18 +88,12 @@ func (ts *TopicStreamer) run(origin shared.Topic, dests []shared.Topic, serializ
 		panic("Number of message serializers must match number of dests")
 	}
 
-	consumer := internal.NewStreamConsumer(
-		origin,
-		dests,
-		serializers,
-		groupId,
-		ts.brokers,
-		ts.consumerConfig,
-		ts.producerConfig,
-	)
+	for i, dest := range dests {
+		ts.consumer.AddDestination(dest, serializers[i])
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go consumer.StartAsGroup(ctx)
+	go ts.consumer.StartAsGroup(ctx)
 
 	return cancel
 }
