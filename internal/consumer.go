@@ -104,6 +104,26 @@ func (consumer *StreamConsumer) StartAsGroup(ctx context.Context) {
 
 // Setup is run at the beginning of a new session, before ConsumeClaim.
 func (consumer *StreamConsumer) Setup(session sarama.ConsumerGroupSession) error {
+	if len(consumer.dests) != len(consumer.mss) {
+		panic("Number of message serializers must match number of dests")
+	}
+
+	if len(consumer.brokers) < 1 {
+		panic("No brokers")
+	}
+
+	if consumer.config == nil {
+		panic("No config")
+	}
+
+	if consumer.groupId == "" {
+		consumer.groupId = "streamer"
+	}
+
+	if consumer.producerPool == nil {
+		panic("No producer pool")
+	}
+
 	return nil
 }
 
