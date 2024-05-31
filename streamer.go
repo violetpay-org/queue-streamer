@@ -2,7 +2,6 @@ package qstreamer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/violetpay-org/queue-streamer/internal"
@@ -13,19 +12,47 @@ type TopicStreamer struct {
 	topic   shared.Topic
 	configs []StreamConfig
 	cancels map[StreamConfig]context.CancelFunc
-	conn    sarama.Client
+
+	// For kafka
+	brokers        []string
+	consumerConfig *sarama.Config
+	producerConfig *sarama.Config
 }
 
-func NewTopicStreamer(brokers []string, topic shared.Topic) *TopicStreamer {
-	conn, err := sarama.NewClient(brokers, internal.NewSaramaConfig())
-	if err != nil {
-		panic(err)
+// NewTopicStreamer creates a new topic streamer that streams messages from a topic to other topics.
+// The streamer is configured with a list of brokers and a topic to stream from.
+// If you want to override the default configuration of the sarama consumer and producer, you can pass additional arguments.
+//   - ts := NewTopicStreamer(brokers, topic)
+//   - ts := NewTopicStreamer(brokers, topic, consumerConfig, producerConfig)
+//   - ts := NewTopicStreamer(brokers, topic, nil, producerConfig)
+func NewTopicStreamer(brokers []string, topic shared.Topic, args ...interface{}) *TopicStreamer {
+	var ccfg *sarama.Config
+	var pcfg *sarama.Config
+
+	switch len(args) {
+	case 1:
+		panic("Invalid number of arguments")
+	case 2:
+		consumerConfig, ok := args[0].(*sarama.Config)
+		if ok || consumerConfig != nil {
+			ccfg = consumerConfig
+		}
+
+		producerConfig, ok := args[1].(*sarama.Config)
+		if ok || producerConfig != nil {
+			pcfg = producerConfig
+		}
+	default:
+		ccfg = nil
+		pcfg = nil
 	}
 
 	return &TopicStreamer{
-		topic:   topic,
-		cancels: make(map[StreamConfig]context.CancelFunc),
-		conn:    conn,
+		topic:          topic,
+		cancels:        make(map[StreamConfig]context.CancelFunc),
+		brokers:        brokers,
+		consumerConfig: ccfg,
+		producerConfig: pcfg,
 	}
 }
 
@@ -45,52 +72,31 @@ func (ts *TopicStreamer) Run() {
 }
 
 // run starts one goroutine for each stream spec
-func (ts *TopicStreamer) run(origin shared.Topic, destinations []shared.Topic, messageSerializers []shared.MessageSerializer, groupId string) context.CancelFunc {
-	if destinations == nil || len(destinations) == 0 {
-		panic("No destinations")
+func (ts *TopicStreamer) run(origin shared.Topic, dests []shared.Topic, serializers []shared.MessageSerializer, groupId string) context.CancelFunc {
+	if dests == nil || len(dests) == 0 {
+		panic("No dests")
 	}
 
-	if messageSerializers == nil || len(messageSerializers) == 0 {
+	if serializers == nil || len(serializers) == 0 {
 		panic("No message serializers")
 	}
 
-	if len(messageSerializers) != len(destinations) {
-		panic("Number of message serializers must match number of destinations")
+	if len(serializers) != len(dests) {
+		panic("Number of message serializers must match number of dests")
 	}
 
 	consumer := internal.NewStreamConsumer(
-		destinations,
-		messageSerializers,
+		origin,
+		dests,
+		serializers,
 		groupId,
-		ts.conn,
+		ts.brokers,
+		ts.consumerConfig,
+		ts.producerConfig,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	client, err := sarama.NewConsumerGroupFromClient(groupId, ts.conn)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("Running consumer", origin.Name(), destinations)
-
-	go func() {
-		fmt.Println("goroutine")
-		for {
-			// `Consume` should be called inside an infinite loop, when a
-			// server-side rebalance happens, the consumer session will need to be
-			// recreated to get the new claims
-			if err := client.Consume(ctx, []string{origin.Name()}, consumer); err != nil {
-				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
-					return
-				}
-				fmt.Println("Error from consumer: ", err)
-			}
-			// check if context was cancelled, signaling that the consumer should stop
-			if ctx.Err() != nil {
-				return
-			}
-		}
-	}()
+	go consumer.StartAsGroup(ctx)
 
 	return cancel
 }

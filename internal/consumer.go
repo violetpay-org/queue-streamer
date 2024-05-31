@@ -1,27 +1,99 @@
 package internal
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/violetpay-org/queue-streamer/shared"
+	"sync"
 )
+
+var transactionalId int32 = 0
+var mutex = &sync.Mutex{}
 
 // StreamConsumer is a consumer that consumes messages from a Kafka topic and produces them to other topics.
 // It implements the sarama.ConsumerGroupHandler interface.
 type StreamConsumer struct {
 	groupId      string
-	conn         sarama.Client
 	producerPool *producerPool
-	destinations []shared.Topic
+	origin       shared.Topic
+	dests        []shared.Topic
 	mss          []shared.MessageSerializer
+
+	// For kafka
+	brokers []string
+	config  *sarama.Config
 }
 
-func NewStreamConsumer(destinations []shared.Topic, messageSerializers []shared.MessageSerializer, groupId string, conn sarama.Client) *StreamConsumer {
+func NewStreamConsumer(
+	origin shared.Topic, dests []shared.Topic, serializers []shared.MessageSerializer, groupId string,
+	brokers []string, config *sarama.Config, producerConfig *sarama.Config,
+) *StreamConsumer {
+	// producerConfigProvider is for transactional producer.
+	producerConfigProvider := func() *sarama.Config {
+		var pcfg *sarama.Config
+		pcfg = producerConfig
+		if pcfg == nil {
+			pcfg = sarama.NewConfig()
+		}
+
+		// override the configuration
+		pcfg.Net.MaxOpenRequests = 1
+		pcfg.Producer.Idempotent = true
+		pcfg.Producer.RequiredAcks = sarama.WaitForAll
+
+		if pcfg.Producer.Transaction.ID == "" {
+			pcfg.Producer.Transaction.ID = "streamer"
+		}
+
+		mutex.Lock()
+		defer mutex.Unlock()
+		pcfg.Producer.Transaction.ID = pcfg.Producer.Transaction.ID + fmt.Sprintf("-%d", transactionalId)
+		transactionalId++
+
+		return pcfg
+	}
+
+	if config == nil {
+		config = sarama.NewConfig()
+	}
+
+	// override the configuration
+	config.Consumer.Offsets.AutoCommit.Enable = false
+
 	return &StreamConsumer{
 		groupId:      groupId,
-		producerPool: newProducerPool(conn),
-		destinations: destinations,
-		mss:          messageSerializers,
+		producerPool: newProducerPool(brokers, producerConfigProvider),
+		origin:       origin,
+		dests:        dests,
+		mss:          serializers,
+		brokers:      brokers,
+		config:       config,
+	}
+}
+
+func (consumer *StreamConsumer) StartAsGroup(ctx context.Context) {
+	client, err := sarama.NewConsumerGroup(consumer.brokers, consumer.groupId, consumer.config)
+	if err != nil {
+		panic(err)
+	}
+
+	for {
+		// `Consume` should be called inside an infinite loop, when a
+		// server-side rebalance happens, the consumer session will need to be
+		// recreated to get the new claims
+		if err := client.Consume(ctx, []string{consumer.origin.Name()}, consumer); err != nil {
+			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+				return
+			}
+			fmt.Println("Error from consumer: ", err)
+		}
+		// check if context was cancelled, signaling that the consumer should stop
+		if ctx.Err() != nil {
+			fmt.Println("Context cancelled")
+			return
+		}
 	}
 }
 
@@ -60,7 +132,7 @@ func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 					return
 				}
 
-				for i, destination := range consumer.destinations {
+				for i, destination := range consumer.dests {
 					// Produce the message
 					producer.Input() <- &sarama.ProducerMessage{
 						Topic: destination.Name(),
