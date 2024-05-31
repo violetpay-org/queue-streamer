@@ -7,6 +7,7 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/violetpay-org/queue-streamer/shared"
 	"sync"
+	"time"
 )
 
 var transactionalId int32 = 0
@@ -30,22 +31,27 @@ func NewStreamConsumer(
 	origin shared.Topic, groupId string,
 	brokers []string, config *sarama.Config, producerConfig *sarama.Config,
 ) *StreamConsumer {
-	if producerConfig == nil {
-		producerConfig = sarama.NewConfig()
-	}
-
 	if config == nil {
 		config = sarama.NewConfig()
 	}
 
+	if producerConfig == nil {
+		producerConfig = sarama.NewConfig()
+	}
+
 	// producerConfigProvider is for transactional producer.
 	producerConfigProvider := func() *sarama.Config {
-		pcfg := producerConfig
+		var pcfg *sarama.Config = sarama.NewConfig()
+
+		// Deep copy for preventing race condition
+		Copy(producerConfig, pcfg)
 
 		// override the configuration
 		pcfg.Net.MaxOpenRequests = 1
 		pcfg.Producer.Idempotent = true
 		pcfg.Producer.RequiredAcks = sarama.WaitForAll
+		pcfg.Producer.Retry.Max = 5
+		pcfg.Producer.Retry.Backoff = 1000 * time.Millisecond
 
 		if pcfg.Producer.Transaction.ID == "" {
 			pcfg.Producer.Transaction.ID = "streamer"
@@ -64,7 +70,7 @@ func NewStreamConsumer(
 
 	return &StreamConsumer{
 		groupId:      groupId,
-		producerPool: newProducerPool(brokers, producerConfigProvider),
+		producerPool: NewProducerPool(brokers, producerConfigProvider),
 		origin:       origin,
 		dests:        make([]shared.Topic, 0),
 		mss:          make([]shared.MessageSerializer, 0),
@@ -154,6 +160,9 @@ func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 				err := producer.BeginTxn()
 				if err != nil {
 					fmt.Println("Error starting transaction:", err)
+					consumer.handleTxnError(producer, msg, session, err, func() error {
+						return producer.BeginTxn()
+					})
 					return
 				}
 
