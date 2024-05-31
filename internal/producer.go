@@ -53,7 +53,7 @@ func (p *producerPool) Return(producer sarama.AsyncProducer, topic shared.Topic)
 	p.producers[topic] = append(p.producers[topic], producer)
 }
 
-func newProducerPool(brokers []string, configProvider func() *sarama.Config) *producerPool {
+func NewProducerPool(brokers []string, configProvider func() *sarama.Config) *producerPool {
 	if configProvider() == nil {
 		panic("configProvider is nil")
 	}
