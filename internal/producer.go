@@ -8,10 +8,14 @@ import (
 )
 
 // producerPool is a pool of producers that can be used to produce messages to Kafka for one set of brokers.
+// It is not related to Transaction, Transactional Producer implements by configProvider.
 type producerPool struct {
 	locker    sync.Mutex
 	producers map[shared.Topic][]sarama.AsyncProducer
-	conn      sarama.Client
+
+	// For kafka
+	brokers        []string
+	configProvider func() *sarama.Config
 }
 
 // Take returns a producer for a given topic. If the producer does not exist, it creates a new one.
@@ -21,7 +25,7 @@ func (p *producerPool) Take(topic shared.Topic) (producer sarama.AsyncProducer) 
 
 	if producers, ok := p.producers[topic]; !ok || len(producers) == 0 {
 		// If there are no producers for the topic, create a new one
-		producer = p.generateProducer(p.conn)
+		producer = p.generateProducer()
 		return
 	}
 
@@ -49,18 +53,23 @@ func (p *producerPool) Return(producer sarama.AsyncProducer, topic shared.Topic)
 	p.producers[topic] = append(p.producers[topic], producer)
 }
 
-func newProducerPool(connection sarama.Client) *producerPool {
+func newProducerPool(brokers []string, configProvider func() *sarama.Config) *producerPool {
+	if configProvider() == nil {
+		panic("configProvider is nil")
+	}
+
 	pool := &producerPool{
-		locker:    sync.Mutex{},
-		producers: make(map[shared.Topic][]sarama.AsyncProducer),
-		conn:      connection,
+		locker:         sync.Mutex{},
+		producers:      make(map[shared.Topic][]sarama.AsyncProducer),
+		brokers:        brokers,
+		configProvider: configProvider,
 	}
 
 	return pool
 }
 
-func (p *producerPool) generateProducer(conn sarama.Client) sarama.AsyncProducer {
-	producer, err := sarama.NewAsyncProducer([]string{"b-3.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-2.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-1.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092"}, NewProducerConfig())
+func (p *producerPool) generateProducer() sarama.AsyncProducer {
+	producer, err := sarama.NewAsyncProducer(p.brokers, p.configProvider())
 	if err != nil {
 		fmt.Println("Error creating producer", err)
 		return nil
