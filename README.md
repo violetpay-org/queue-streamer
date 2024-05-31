@@ -40,10 +40,10 @@ func main() {
 	
 	streamer := qstreamer.NewTopicStreamer(brokers, origin)
 
-	cfg := qstreamer.NewStreamConfig(&TestSerializer{}, destination1)
+	cfg := qstreamer.NewStreamConfig(serializer, destination1)
 	streamer.AddConfig(cfg)
 
-	cfg = qstreamer.NewStreamConfig(&TestSerializer{}, destination2)
+	cfg = qstreamer.NewStreamConfig(serializer, destination2)
 	streamer.AddConfig(cfg)
 	
 	streamer.Run() // Non-blocking
@@ -56,19 +56,20 @@ func main() {
 
 ### Explanation
 
-1. Set Topics: Use the NewTopic function to set the start and end topics.
+1. **Set Topics**: Use the `NewTopic()` to set the start and end topics.
 
-2. Use PassThroughSerializer: Create a pass-through serializer using NewPassThroughSerializer which does not alter the message.
+2. **Use PassThroughSerializer**: Create a pass-through serializer using `NewPassThroughSerializer()` which does not manufacture the message.
    * If you want to convert the message, you can create a custom serializer that implements the Serializer interface.
-3. Set StreamConfig: Use the NewStreamConfig function to configure the stream settings.
 
-4. Create and Configure TopicStreamer: Use the NewTopicStreamer function to create the topic streamer and the AddConfig method to add the stream configuration.
+3. **Set StreamConfig**: Use the `NewStreamConfig()` to configure the stream settings.
 
-5. Run and Stop Streamer: Call the Run method to start the streamer and the Stop method to stop the streamer.Use WaitGroup: Use sync.WaitGroup to prevent the main goroutine from exiting.
+4. **Create and Configure TopicStreamer**: Use the `NewTopicStreamer()` to create the topic streamer and the `AddConfig()` method to add the stream configuration.
+
+5. **Run and Stop Streamer**: Call the `Run()` method to start the streamer and the `Stop()` method to stop the streamer.
 
 ## Contribution
 
-Contributions are welcome! You can contribute to the project by reporting bugs, requesting features, and submitting pull requests.Run method to start the streamer and the Stop method to stop the streamer.
+Contributions are welcome! You can contribute to the project by reporting bugs, requesting features, and submitting pull requests. 
 
 ## License
 
