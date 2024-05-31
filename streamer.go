@@ -2,7 +2,6 @@ package qstreamer
 
 import (
 	"context"
-	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/violetpay-org/queue-streamer/internal"
 	"github.com/violetpay-org/queue-streamer/shared"
@@ -11,7 +10,7 @@ import (
 type TopicStreamer struct {
 	topic   shared.Topic
 	configs []StreamConfig
-	cancels map[StreamConfig]context.CancelFunc
+	cancel  context.CancelFunc
 
 	consumer *internal.StreamConsumer
 }
@@ -55,7 +54,7 @@ func NewTopicStreamer(brokers []string, topic shared.Topic, args ...interface{})
 	return &TopicStreamer{
 		topic:    topic,
 		configs:  make([]StreamConfig, 0),
-		cancels:  make(map[StreamConfig]context.CancelFunc),
+		cancel:   nil,
 		consumer: consumer,
 	}
 }
@@ -72,7 +71,7 @@ func (ts *TopicStreamer) Run() {
 		mss = append(mss, config.MessageSerializer())
 	}
 
-	ts.run(dests, mss)
+	ts.cancel = ts.run(dests, mss)
 }
 
 func (ts *TopicStreamer) run(dests []shared.Topic, serializers []shared.MessageSerializer) context.CancelFunc {
@@ -98,20 +97,8 @@ func (ts *TopicStreamer) run(dests []shared.Topic, serializers []shared.MessageS
 	return cancel
 }
 
-func (ts *TopicStreamer) StopAll() {
-	for _, cancel := range ts.cancels {
-		cancel()
-	}
-}
-
-func (ts *TopicStreamer) Stop(spec StreamConfig) {
-	if cancel, ok := ts.cancels[spec]; ok {
-		cancel()
-		fmt.Println("Spec stopped")
-		return
-	}
-
-	fmt.Println("Spec not found")
+func (ts *TopicStreamer) Stop() {
+	ts.cancel()
 }
 
 func NewTopic(name string, partition int32) shared.Topic {
