@@ -17,7 +17,7 @@ var mutex = &sync.Mutex{}
 // It implements the sarama.ConsumerGroupHandler interface.
 type StreamConsumer struct {
 	groupId      string
-	producerPool *producerPool
+	producerPool *ProducerPool
 	origin       shared.Topic
 	dests        []shared.Topic
 	mss          []shared.MessageSerializer
@@ -25,6 +25,10 @@ type StreamConsumer struct {
 	// For kafka
 	brokers []string
 	config  *sarama.Config
+}
+
+func (consumer *StreamConsumer) ProducerPool() *ProducerPool {
+	return consumer.producerPool
 }
 
 func NewStreamConsumer(
@@ -84,6 +88,14 @@ func (consumer *StreamConsumer) AddDestination(dest shared.Topic, serializer sha
 	consumer.mss = append(consumer.mss, serializer)
 }
 
+func (consumer *StreamConsumer) Destinations() []shared.Topic {
+	return consumer.dests
+}
+
+func (consumer *StreamConsumer) MessageSerializers() []shared.MessageSerializer {
+	return consumer.mss
+}
+
 func (consumer *StreamConsumer) StartAsGroup(ctx context.Context) {
 	client, err := sarama.NewConsumerGroup(consumer.brokers, consumer.groupId, consumer.config)
 	if err != nil {
@@ -120,6 +132,10 @@ func (consumer *StreamConsumer) Setup(session sarama.ConsumerGroupSession) error
 
 	if consumer.config == nil {
 		panic("No config")
+	}
+
+	if consumer.origin.Name() == "" || consumer.origin.Partition() < 1 {
+		panic("No origin or partition")
 	}
 
 	if consumer.groupId == "" {
