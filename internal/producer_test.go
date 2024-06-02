@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-var brokers = []string{"b-3.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-2.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-1.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092"}
+var pbrokers = []string{"b-3.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-2.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-1.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092"}
 
 func TestProducerPool_Take(t *testing.T) {
-	pool := internal.NewProducerPool(brokers, func() *sarama.Config {
+	pool := internal.NewProducerPool(pbrokers, func() *sarama.Config {
 		return sarama.NewConfig()
 	})
 
@@ -27,7 +27,7 @@ func TestProducerPool_Take(t *testing.T) {
 }
 
 func TestProducerPool_Return(t *testing.T) {
-	pool := internal.NewProducerPool(brokers, func() *sarama.Config {
+	pool := internal.NewProducerPool(pbrokers, func() *sarama.Config {
 		return sarama.NewConfig()
 	})
 
