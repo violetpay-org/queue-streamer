@@ -7,9 +7,9 @@ import (
 	"sync"
 )
 
-// producerPool is a pool of producers that can be used to produce messages to Kafka for one set of brokers.
+// ProducerPool is a pool of producers that can be used to produce messages to Kafka for one set of brokers.
 // It is not related to Transaction, Transactional Producer implements by configProvider.
-type producerPool struct {
+type ProducerPool struct {
 	locker    sync.Mutex
 	producers map[shared.Topic][]sarama.AsyncProducer
 
@@ -19,7 +19,7 @@ type producerPool struct {
 }
 
 // Take returns a producer for a given topic. If the producer does not exist, it creates a new one.
-func (p *producerPool) Take(topic shared.Topic) (producer sarama.AsyncProducer) {
+func (p *ProducerPool) Take(topic shared.Topic) (producer sarama.AsyncProducer) {
 	p.locker.Lock()
 	defer p.locker.Unlock()
 
@@ -35,7 +35,7 @@ func (p *producerPool) Take(topic shared.Topic) (producer sarama.AsyncProducer) 
 }
 
 // Return returns a producer to the pool.
-func (p *producerPool) Return(producer sarama.AsyncProducer, topic shared.Topic) {
+func (p *ProducerPool) Return(producer sarama.AsyncProducer, topic shared.Topic) {
 	p.locker.Lock()
 	defer p.locker.Unlock()
 
@@ -53,12 +53,27 @@ func (p *producerPool) Return(producer sarama.AsyncProducer, topic shared.Topic)
 	p.producers[topic] = append(p.producers[topic], producer)
 }
 
-func NewProducerPool(brokers []string, configProvider func() *sarama.Config) *producerPool {
+func (p *ProducerPool) Producers() map[shared.Topic][]sarama.AsyncProducer {
+	return p.producers
+}
+
+func (p *ProducerPool) Close() {
+	p.locker.Lock()
+	defer p.locker.Unlock()
+
+	for _, producers := range p.producers {
+		for _, producer := range producers {
+			_ = producer.Close()
+		}
+	}
+}
+
+func NewProducerPool(brokers []string, configProvider func() *sarama.Config) *ProducerPool {
 	if configProvider() == nil {
 		panic("configProvider is nil")
 	}
 
-	pool := &producerPool{
+	pool := &ProducerPool{
 		locker:         sync.Mutex{},
 		producers:      make(map[shared.Topic][]sarama.AsyncProducer),
 		brokers:        brokers,
@@ -68,7 +83,7 @@ func NewProducerPool(brokers []string, configProvider func() *sarama.Config) *pr
 	return pool
 }
 
-func (p *producerPool) generateProducer() sarama.AsyncProducer {
+func (p *ProducerPool) generateProducer() sarama.AsyncProducer {
 	producer, err := sarama.NewAsyncProducer(p.brokers, p.configProvider())
 	if err != nil {
 		fmt.Println("Error creating producer", err)

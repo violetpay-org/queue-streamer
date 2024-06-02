@@ -19,6 +19,11 @@ func TestProducerPool_Take(t *testing.T) {
 
 	producer := pool.Take(topic)
 	assert.NotNil(t, &producer)
+
+	producers := pool.Producers()
+	assert.NotNil(t, &producers)
+
+	assert.Equal(t, 0, len(producers[topic]))
 }
 
 func TestProducerPool_Return(t *testing.T) {
@@ -33,6 +38,14 @@ func TestProducerPool_Return(t *testing.T) {
 
 	pool.Return(producer, topic)
 
+	producers := pool.Producers()
+	assert.NotNil(t, &producers)
+
+	assert.Equal(t, 1, len(producers[topic]))
+
+	pool.Return(nil, topic)
+	assert.Equal(t, 1, len(producers[topic]))
+
 	producer = pool.Take(topic)
-	assert.NotNil(t, &producer)
+	assert.Equal(t, 0, len(producers[topic]))
 }
