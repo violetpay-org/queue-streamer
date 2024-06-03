@@ -188,23 +188,39 @@ func TestHandleTxnError(t *testing.T) {
 	})
 
 	t.Run("HandleTxnError with ProducerTxnFlagInError", func(t *testing.T) {
+		functionCalledCount := 0
+		testFunction := func() {
+			functionCalledCount++
+		}
+
 		producer.TxnStatusFlag = sarama.ProducerTxnFlagFatalError
 
 		consumer.HandleTxnError(producer, message, session, nil, func() error {
+			testFunction()
 			return nil
 		})
 		assert.True(t, session.ResetOffsetCalled)
 		assert.False(t, producer.AbortTxnCalled)
+
+		assert.Equal(t, 0, functionCalledCount)
 	})
 
 	t.Run("HandleTxnError with ProducerTxnFlagAbortableError", func(t *testing.T) {
+		functionCalledCount := 0
+		testFunction := func() {
+			functionCalledCount++
+		}
+
 		producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
 
 		consumer.HandleTxnError(producer, message, session, nil, func() error {
+			testFunction()
 			return nil
 		})
 		assert.True(t, session.ResetOffsetCalled)
 		assert.True(t, producer.AbortTxnCalled)
+
+		assert.Equal(t, 0, functionCalledCount)
 	})
 
 }
