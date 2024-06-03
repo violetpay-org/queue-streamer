@@ -5,6 +5,11 @@ import "reflect"
 // Deep copy
 func Copy(source interface{}, destin interface{}) {
 	x := reflect.ValueOf(source)
+	dest := reflect.ValueOf(destin)
+	if dest.Kind() != reflect.Ptr {
+		panic("destin must be a pointer")
+	}
+
 	if x.Kind() == reflect.Ptr {
 		starX := x.Elem()
 		y := reflect.New(starX.Type())
@@ -12,6 +17,6 @@ func Copy(source interface{}, destin interface{}) {
 		starY.Set(starX)
 		reflect.ValueOf(destin).Elem().Set(y.Elem())
 	} else {
-		destin = x.Interface()
+		reflect.ValueOf(destin).Elem().Set(x)
 	}
 }
