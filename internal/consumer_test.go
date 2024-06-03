@@ -26,103 +26,50 @@ func TestStreamConsumer_AddDestination(t *testing.T) {
 	origin := shared.Topic{Name: "test", Partition: 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
-	consumer.AddDestination(shared.Topic{Name: "test2", Partition: 3}, &TestSerializer{})
-	assert.Equal(t, 1, len(consumer.Destinations()))
-	assert.Equal(t, 1, len(consumer.MessageSerializers()))
+	t.Cleanup(func() {})
 
-	consumer.AddDestination(shared.Topic{Name: "test3", Partition: 3}, &TestSerializer{})
-	assert.Equal(t, 2, len(consumer.Destinations()))
-	assert.Equal(t, 2, len(consumer.MessageSerializers()))
+	t.Run("AddDestination", func(t *testing.T) {
+		consumer.AddDestination(shared.Topic{Name: "test2", Partition: 3}, &TestSerializer{})
+		assert.Equal(t, 1, len(consumer.Destinations()))
+		assert.Equal(t, 1, len(consumer.MessageSerializers()))
 
-	assert.NotEqual(t, consumer.Destinations()[0], consumer.Destinations()[1])
-}
+		consumer.AddDestination(shared.Topic{Name: "test3", Partition: 3}, &TestSerializer{})
+		assert.Equal(t, 2, len(consumer.Destinations()))
+		assert.Equal(t, 2, len(consumer.MessageSerializers()))
 
-// MockConsumerGroupSession is a mock implementation of sarama.ConsumerGroupSession
-type MockConsumerGroupSession struct {
-	Ctx               context.Context
-	ResetOffsetCalled bool
-}
-
-func (t *MockConsumerGroupSession) Claims() map[string][]int32 {
-	return nil
-}
-
-func (t *MockConsumerGroupSession) MemberID() string {
-	return ""
-}
-
-func (t *MockConsumerGroupSession) GenerationID() int32 {
-	return 0
-}
-
-func (t *MockConsumerGroupSession) MarkOffset(topic string, partition int32, offset int64, metadata string) {
-	return
-}
-
-func (t *MockConsumerGroupSession) Commit() {
-	return
-}
-
-func (t *MockConsumerGroupSession) ResetOffset(topic string, partition int32, offset int64, metadata string) {
-	t.ResetOffsetCalled = true
-	return
-}
-
-func (t *MockConsumerGroupSession) MarkMessage(msg *sarama.ConsumerMessage, metadata string) {
-	return
-}
-
-func (t *MockConsumerGroupSession) Context() context.Context {
-	return t.Ctx
+		assert.NotEqual(t, consumer.Destinations()[0], consumer.Destinations()[1])
+	})
 }
 
 func TestStreamConsumer_Setup(t *testing.T) {
-	sess := &MockConsumerGroupSession{}
 	origin := shared.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+	sess := &internal.MockConsumerGroupSession{}
 
-	consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
-	assert.Equal(t, 1, len(consumer.Destinations()))
-
-	assert.NotPanics(t, func() {
-		_ = consumer.Setup(sess)
+	t.Cleanup(func() {
+		sess = &internal.MockConsumerGroupSession{}
 	})
 
-	consumer = &internal.StreamConsumer{}
-	assert.Panics(t, func() {
-		_ = consumer.Setup(sess)
+	t.Run("Setup", func(t *testing.T) {
+		consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
+		assert.Equal(t, 1, len(consumer.Destinations()))
+
+		assert.NotPanics(t, func() {
+			_ = consumer.Setup(sess)
+		})
+
+		consumer = &internal.StreamConsumer{}
+		assert.Panics(t, func() {
+			_ = consumer.Setup(sess)
+		})
 	})
-}
-
-// MockConsumerGroupClaim is a mock implementation of sarama.ConsumerGroupClaim
-type MockConsumerGroupClaim struct {
-	DataChan chan *sarama.ConsumerMessage
-}
-
-func (t *MockConsumerGroupClaim) Topic() string {
-	return ""
-}
-
-func (t *MockConsumerGroupClaim) Partition() int32 {
-	return 0
-}
-
-func (t *MockConsumerGroupClaim) InitialOffset() int64 {
-	return 0
-}
-
-func (t *MockConsumerGroupClaim) HighWaterMarkOffset() int64 {
-	return 0
-}
-
-func (t *MockConsumerGroupClaim) Messages() <-chan *sarama.ConsumerMessage {
-	return t.DataChan
 }
 
 func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 	origin := shared.Topic{Name: "test", Partition: 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
-	sess := &MockConsumerGroupSession{}
+	sess := &internal.MockConsumerGroupSession{}
+	msg := &internal.MockConsumerGroupClaim{}
 
 	//producerPool := internal.NewProducerPool(cbrokers, func() *sarama.Config {
 	//	return sarama.NewConfig()
@@ -131,7 +78,8 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 	//producer := producerPool.Take(origin)
 
 	t.Cleanup(func() {
-		sess = &MockConsumerGroupSession{}
+		sess = &internal.MockConsumerGroupSession{}
+		msg = &internal.MockConsumerGroupClaim{}
 	})
 
 	t.Run("ConsumeClaim Gracefully shutdown", func(t *testing.T) {
@@ -141,7 +89,7 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 		exited := false
 		mutex := &sync.Mutex{}
 		go func() {
-			_ = consumer.ConsumeClaim(sess, &MockConsumerGroupClaim{})
+			_ = consumer.ConsumeClaim(sess, msg)
 			mutex.Lock()
 			defer mutex.Unlock()
 			exited = true
@@ -156,15 +104,11 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 
 	t.Run("ConsumeClaim Consume message", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
+		msg.DataChan = make(chan *sarama.ConsumerMessage, 1)
 		sess.Ctx = ctx
-
-		msg := &MockConsumerGroupClaim{
-			DataChan: make(chan *sarama.ConsumerMessage, 1),
-		}
 
 		exited := false
 		mutex := &sync.Mutex{}
-
 		go func() {
 			assert.Equal(t, 0, len(consumer.ProducerPool().Producers()))
 			_ = consumer.ConsumeClaim(sess, msg)
@@ -194,71 +138,17 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 	})
 }
 
-type MockAsyncProducer struct {
-	TxnStatusFlag  sarama.ProducerTxnStatusFlag
-	AbortTxnCalled bool
-}
-
-func (t *MockAsyncProducer) AsyncClose() {
-	return
-}
-
-func (t *MockAsyncProducer) Close() error {
-	return nil
-}
-
-func (t *MockAsyncProducer) Input() chan<- *sarama.ProducerMessage {
-	return nil
-}
-
-func (t *MockAsyncProducer) Successes() <-chan *sarama.ProducerMessage {
-	return nil
-}
-
-func (t *MockAsyncProducer) Errors() <-chan *sarama.ProducerError {
-	return nil
-}
-
-func (t *MockAsyncProducer) IsTransactional() bool {
-	return false
-}
-
-func (t *MockAsyncProducer) TxnStatus() sarama.ProducerTxnStatusFlag {
-	return t.TxnStatusFlag
-}
-
-func (t *MockAsyncProducer) BeginTxn() error {
-	return nil
-}
-
-func (t *MockAsyncProducer) CommitTxn() error {
-	return nil
-}
-
-func (t *MockAsyncProducer) AbortTxn() error {
-	t.AbortTxnCalled = true
-	return nil
-}
-
-func (t *MockAsyncProducer) AddOffsetsToTxn(offsets map[string][]*sarama.PartitionOffsetMetadata, groupId string) error {
-	return nil
-}
-
-func (t *MockAsyncProducer) AddMessageToTxn(msg *sarama.ConsumerMessage, groupId string, metadata *string) error {
-	return nil
-}
-
 func TestHandleTxnError(t *testing.T) {
 	origin := shared.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
-	producer := &MockAsyncProducer{}
+	producer := &internal.MockAsyncProducer{}
 	message := &sarama.ConsumerMessage{}
-	session := &MockConsumerGroupSession{}
+	session := &internal.MockConsumerGroupSession{}
 
 	t.Cleanup(func() {
-		session = &MockConsumerGroupSession{}
-		producer = &MockAsyncProducer{}
+		session = &internal.MockConsumerGroupSession{}
+		producer = &internal.MockAsyncProducer{}
 		message = &sarama.ConsumerMessage{}
 	})
 
