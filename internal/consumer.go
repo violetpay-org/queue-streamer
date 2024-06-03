@@ -222,6 +222,11 @@ func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 	}
 }
 
+// HandleTxnError handles transaction errors, this exported method is only for testing purposes.
+func (consumer *StreamConsumer) HandleTxnError(producer sarama.AsyncProducer, message *sarama.ConsumerMessage, session sarama.ConsumerGroupSession, err error, defaulthandler func() error) {
+	consumer.handleTxnError(producer, message, session, err, defaulthandler)
+}
+
 func (consumer *StreamConsumer) handleTxnError(producer sarama.AsyncProducer, message *sarama.ConsumerMessage, session sarama.ConsumerGroupSession, err error, defaulthandler func() error) {
 	fmt.Printf("Message consumer: unable to process transaction: %+v", err)
 	for {

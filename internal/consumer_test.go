@@ -2,6 +2,7 @@ package internal_test
 
 import (
 	"context"
+	"errors"
 	"github.com/IBM/sarama"
 	"github.com/stretchr/testify/assert"
 	"github.com/violetpay-org/queue-streamer/internal"
@@ -38,7 +39,8 @@ func TestStreamConsumer_AddDestination(t *testing.T) {
 
 // MockConsumerGroupSession is a mock implementation of sarama.ConsumerGroupSession
 type MockConsumerGroupSession struct {
-	ctx context.Context
+	ctx               context.Context
+	resetOffsetCalled bool
 }
 
 func (t *MockConsumerGroupSession) Claims() map[string][]int32 {
@@ -62,6 +64,7 @@ func (t *MockConsumerGroupSession) Commit() {
 }
 
 func (t *MockConsumerGroupSession) ResetOffset(topic string, partition int32, offset int64, metadata string) {
+	t.resetOffsetCalled = true
 	return
 }
 
@@ -91,6 +94,7 @@ func TestStreamConsumer_Setup(t *testing.T) {
 	})
 }
 
+// MockConsumerGroupClaim is a mock implementation of sarama.ConsumerGroupClaim
 type MockConsumerGroupClaim struct {
 	DataChan chan *sarama.ConsumerMessage
 }
@@ -183,4 +187,126 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 		assert.True(t, exited)
 		mutex.Unlock()
 	})
+}
+
+type MockAsyncProducer struct {
+	TxnStatusFlag  sarama.ProducerTxnStatusFlag
+	AbortTxnCalled bool
+}
+
+func (t *MockAsyncProducer) AsyncClose() {
+	return
+}
+
+func (t *MockAsyncProducer) Close() error {
+	return nil
+}
+
+func (t *MockAsyncProducer) Input() chan<- *sarama.ProducerMessage {
+	return nil
+}
+
+func (t *MockAsyncProducer) Successes() <-chan *sarama.ProducerMessage {
+	return nil
+}
+
+func (t *MockAsyncProducer) Errors() <-chan *sarama.ProducerError {
+	return nil
+}
+
+func (t *MockAsyncProducer) IsTransactional() bool {
+	return false
+}
+
+func (t *MockAsyncProducer) TxnStatus() sarama.ProducerTxnStatusFlag {
+	return t.TxnStatusFlag
+}
+
+func (t *MockAsyncProducer) BeginTxn() error {
+	return nil
+}
+
+func (t *MockAsyncProducer) CommitTxn() error {
+	return nil
+}
+
+func (t *MockAsyncProducer) AbortTxn() error {
+	t.AbortTxnCalled = true
+	return nil
+}
+
+func (t *MockAsyncProducer) AddOffsetsToTxn(offsets map[string][]*sarama.PartitionOffsetMetadata, groupId string) error {
+	return nil
+}
+
+func (t *MockAsyncProducer) AddMessageToTxn(msg *sarama.ConsumerMessage, groupId string, metadata *string) error {
+	return nil
+}
+
+func TestHandleTxnError(t *testing.T) {
+	origin := shared.NewTopic("test", 3)
+	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+
+	producer := &MockAsyncProducer{}
+	message := &sarama.ConsumerMessage{}
+	session := &MockConsumerGroupSession{}
+
+	t.Cleanup(func() {
+		session = &MockConsumerGroupSession{}
+		producer = &MockAsyncProducer{}
+		message = &sarama.ConsumerMessage{}
+	})
+
+	t.Run("HandleTxnError with error", func(t *testing.T) {
+		functionCalledCount := 0
+		testFunction := func() {
+			functionCalledCount++
+		}
+
+		consumer.HandleTxnError(producer, message, session, nil, func() error {
+			testFunction()
+			return nil
+		})
+		assert.False(t, session.resetOffsetCalled)
+	})
+
+	t.Run("HandleTxnError with error, called defaulthandler function several times for retry", func(t *testing.T) {
+		functionCalledCount := 0
+		testFunction := func() error {
+			functionCalledCount++
+
+			if functionCalledCount == 10 {
+				return nil
+			}
+
+			return errors.New("error")
+		}
+
+		consumer.HandleTxnError(producer, message, session, nil, testFunction)
+		assert.False(t, session.resetOffsetCalled)
+		assert.False(t, producer.AbortTxnCalled)
+
+		assert.Equal(t, 10, functionCalledCount)
+	})
+
+	t.Run("HandleTxnError with ProducerTxnFlagInError", func(t *testing.T) {
+		producer.TxnStatusFlag = sarama.ProducerTxnFlagFatalError
+
+		consumer.HandleTxnError(producer, message, session, nil, func() error {
+			return nil
+		})
+		assert.True(t, session.resetOffsetCalled)
+		assert.False(t, producer.AbortTxnCalled)
+	})
+
+	t.Run("HandleTxnError with ProducerTxnFlagAbortableError", func(t *testing.T) {
+		producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
+
+		consumer.HandleTxnError(producer, message, session, nil, func() error {
+			return nil
+		})
+		assert.True(t, session.resetOffsetCalled)
+		assert.True(t, producer.AbortTxnCalled)
+	})
+
 }
