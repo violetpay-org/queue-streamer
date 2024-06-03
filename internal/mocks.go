@@ -8,7 +8,7 @@ import (
 // MockConsumerGroupSession is a mock implementation of sarama.ConsumerGroupSession
 type MockConsumerGroupSession struct {
 	Ctx               context.Context
-	ResetOffsetCalled bool
+	ResetOffsetCalled int
 }
 
 func (t *MockConsumerGroupSession) Claims() map[string][]int32 {
@@ -32,7 +32,7 @@ func (t *MockConsumerGroupSession) Commit() {
 }
 
 func (t *MockConsumerGroupSession) ResetOffset(topic string, partition int32, offset int64, metadata string) {
-	t.ResetOffsetCalled = true
+	t.ResetOffsetCalled++
 	return
 }
 
@@ -71,8 +71,17 @@ func (t *MockConsumerGroupClaim) Messages() <-chan *sarama.ConsumerMessage {
 
 // MockAsyncProducer is a mock implementation of sarama.AsyncProducer
 type MockAsyncProducer struct {
-	TxnStatusFlag  sarama.ProducerTxnStatusFlag
-	AbortTxnCalled bool
+	TxnStatusFlag         sarama.ProducerTxnStatusFlag
+	AbortTxnCalled        int
+	AbortTxnError         error
+	BeginTxnCalled        int
+	BeginTxnError         error
+	CommitTxnCalled       int
+	CommitTxnError        error
+	AddMessageToTxnCalled int
+	AddMessageToTxnError  error
+	CloseCalled           int
+	InputChan             chan *sarama.ProducerMessage
 }
 
 func (t *MockAsyncProducer) AsyncClose() {
@@ -80,11 +89,12 @@ func (t *MockAsyncProducer) AsyncClose() {
 }
 
 func (t *MockAsyncProducer) Close() error {
+	t.CloseCalled++
 	return nil
 }
 
 func (t *MockAsyncProducer) Input() chan<- *sarama.ProducerMessage {
-	return nil
+	return t.InputChan
 }
 
 func (t *MockAsyncProducer) Successes() <-chan *sarama.ProducerMessage {
@@ -104,15 +114,27 @@ func (t *MockAsyncProducer) TxnStatus() sarama.ProducerTxnStatusFlag {
 }
 
 func (t *MockAsyncProducer) BeginTxn() error {
+	t.BeginTxnCalled++
+	if t.BeginTxnError != nil && t.BeginTxnCalled < 10 {
+		return t.BeginTxnError
+	}
+
 	return nil
 }
 
 func (t *MockAsyncProducer) CommitTxn() error {
+	t.CommitTxnCalled++
+	if t.CommitTxnError != nil && t.CommitTxnCalled < 10 {
+		return t.CommitTxnError
+	}
 	return nil
 }
 
 func (t *MockAsyncProducer) AbortTxn() error {
-	t.AbortTxnCalled = true
+	t.AbortTxnCalled++
+	if t.AbortTxnError != nil && t.AbortTxnCalled < 10 {
+		return t.AbortTxnError
+	}
 	return nil
 }
 
@@ -121,5 +143,36 @@ func (t *MockAsyncProducer) AddOffsetsToTxn(offsets map[string][]*sarama.Partiti
 }
 
 func (t *MockAsyncProducer) AddMessageToTxn(msg *sarama.ConsumerMessage, groupId string, metadata *string) error {
+	t.AddMessageToTxnCalled++
+	if t.AddMessageToTxnError != nil && t.AddMessageToTxnCalled < 10 {
+		return t.AddMessageToTxnError
+	}
+	return nil
+}
+
+type MockConsumerGroupHandler struct {
+	SetupCalled        int
+	CleanupCalled      int
+	ConsumeClaimCalled int
+	ConsumeClaimError  error
+}
+
+func (t *MockConsumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
+	t.SetupCalled++
+	return nil
+}
+
+func (t *MockConsumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
+	t.CleanupCalled++
+	return nil
+
+}
+
+func (t *MockConsumerGroupHandler) ConsumeClaim(sarama.ConsumerGroupSession, sarama.ConsumerGroupClaim) error {
+	t.ConsumeClaimCalled++
+	if t.ConsumeClaimError != nil {
+		return t.ConsumeClaimError
+	}
+
 	return nil
 }
