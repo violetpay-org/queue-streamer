@@ -104,7 +104,7 @@ func (ts *TopicStreamer) run(dests []shared.Topic, serializers []shared.MessageS
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go ts.consumer.StartAsGroup(ctx)
+	go ts.consumer.StartAsGroupSelf(ctx)
 
 	return cancel
 }
