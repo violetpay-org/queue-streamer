@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/violetpay-org/queue-streamer/internal"
 	"github.com/violetpay-org/queue-streamer/shared"
-	"sync"
 	"testing"
 	"time"
 )
@@ -25,8 +24,6 @@ func (ts *TestSerializer) MessageToProduceMessage(value string) string {
 func TestStreamConsumer_AddDestination(t *testing.T) {
 	origin := shared.Topic{Name: "test", Partition: 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
-
-	t.Cleanup(func() {})
 
 	t.Run("AddDestination", func(t *testing.T) {
 		consumer.AddDestination(shared.Topic{Name: "test2", Partition: 3}, &TestSerializer{})
@@ -46,22 +43,28 @@ func TestStreamConsumer_Setup(t *testing.T) {
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 	sess := &internal.MockConsumerGroupSession{}
 
-	t.Cleanup(func() {
-		sess = &internal.MockConsumerGroupSession{}
-	})
-
 	t.Run("Setup", func(t *testing.T) {
-		consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
-		assert.Equal(t, 1, len(consumer.Destinations()))
-
-		assert.NotPanics(t, func() {
-			_ = consumer.Setup(sess)
+		t.Cleanup(func() {
+			sess = &internal.MockConsumerGroupSession{}
 		})
 
-		consumer = &internal.StreamConsumer{}
-		assert.Panics(t, func() {
-			_ = consumer.Setup(sess)
+		err := consumer.Setup(sess)
+		assert.Nil(t, err)
+	})
+}
+
+func TestStreamConsumer_Cleanup(t *testing.T) {
+	origin := shared.Topic{"test", 3}
+	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+	sess := &internal.MockConsumerGroupSession{}
+
+	t.Run("Cleanup", func(t *testing.T) {
+		t.Cleanup(func() {
+			sess = &internal.MockConsumerGroupSession{}
 		})
+
+		err := consumer.Cleanup(sess)
+		assert.Nil(t, err)
 	})
 }
 
@@ -71,57 +74,317 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 	sess := &internal.MockConsumerGroupSession{}
 	msg := &internal.MockConsumerGroupClaim{}
 
-	//producerPool := internal.NewProducerPool(cbrokers, func() *sarama.Config {
-	//	return sarama.NewConfig()
-	//})
+	t.Run("ConsumeClaim context canceled", func(t *testing.T) {
+		t.Cleanup(func() {
+			sess = &internal.MockConsumerGroupSession{}
+			msg = &internal.MockConsumerGroupClaim{}
+			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+		})
 
-	//producer := producerPool.Take(origin)
-
-	t.Cleanup(func() {
-		sess = &internal.MockConsumerGroupSession{}
-		msg = &internal.MockConsumerGroupClaim{}
-	})
-
-	t.Run("ConsumeClaim Gracefully shutdown", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		sess.Ctx = ctx
 
-		exited := false
-		mutex := &sync.Mutex{}
-		go func() {
-			_ = consumer.ConsumeClaim(sess, msg)
-			mutex.Lock()
-			defer mutex.Unlock()
-			exited = true
-		}()
-
-		cancel()
-		time.Sleep(100 * time.Millisecond)
-		mutex.Lock()
-		assert.True(t, exited)
-		mutex.Unlock()
-	})
-
-	t.Run("ConsumeClaim Consume message", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
 		msg.DataChan = make(chan *sarama.ConsumerMessage, 1)
-		sess.Ctx = ctx
+		defer close(msg.DataChan)
 
-		exited := false
-		mutex := &sync.Mutex{}
 		go func() {
-			assert.Equal(t, 0, len(consumer.ProducerPool().Producers()))
-			_ = consumer.ConsumeClaim(sess, msg)
-
-			mutex.Lock()
-			exited = true
-			mutex.Unlock()
-			assert.Equal(t, 1, len(consumer.ProducerPool().Producers()))
+			time.Sleep(1 * time.Second)
+			cancel()
 		}()
 
-		time.Sleep(1 * time.Second)
+		err := consumer.ConsumeClaim(sess, msg)
+		assert.Nil(t, err)
+	})
 
-		msg.DataChan <- &sarama.ConsumerMessage{
+	t.Run("ConsumeClaim message channel is closed", func(t *testing.T) {
+		t.Cleanup(func() {
+			sess = &internal.MockConsumerGroupSession{}
+			msg = &internal.MockConsumerGroupClaim{}
+			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		sess.Ctx = ctx
+
+		msg.DataChan = make(chan *sarama.ConsumerMessage, 1)
+
+		go func() {
+			time.Sleep(1 * time.Second)
+			close(msg.DataChan)
+		}()
+
+		err := consumer.ConsumeClaim(sess, msg)
+		assert.Nil(t, err)
+	})
+
+	t.Run("ConsumeClaim no problems", func(t *testing.T) {
+		t.Cleanup(func() {
+			sess = &internal.MockConsumerGroupSession{}
+			msg = &internal.MockConsumerGroupClaim{}
+			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		sess.Ctx = ctx
+
+		msg.DataChan = make(chan *sarama.ConsumerMessage, 1)
+
+		go func() {
+			time.Sleep(1 * time.Second)
+			msg.DataChan <- &sarama.ConsumerMessage{
+				Topic:     "test",
+				Partition: 1,
+				Key:       []byte("key"),
+				Value:     []byte("value"),
+				Offset:    0,
+			}
+			time.Sleep(1 * time.Second)
+			close(msg.DataChan)
+		}()
+
+		assert.Equal(t, 0, len(consumer.ProducerPool().Producers()))
+		err := consumer.ConsumeClaim(sess, msg)
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(consumer.ProducerPool().Producers()))
+	})
+}
+
+func TestStreamConsumer_StartAsGroup(t *testing.T) {
+	origin := shared.Topic{"test", 3}
+	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+	handler := &internal.MockConsumerGroupHandler{}
+
+	t.Run("StartAsGroup context canceled", func(t *testing.T) {
+		t.Cleanup(func() {
+			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+			handler = &internal.MockConsumerGroupHandler{}
+		})
+
+		consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(1 * time.Second)
+			cancel()
+		}()
+		consumer.StartAsGroup(ctx, handler)
+		assert.Equal(t, 1, handler.SetupCalled)
+		assert.Equal(t, 1, handler.CleanupCalled)
+	})
+
+	t.Run("StartAsGroup panic because of empty consumer", func(t *testing.T) {
+		t.Cleanup(func() {
+			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+			handler = &internal.MockConsumerGroupHandler{}
+		})
+
+		consumer = &internal.StreamConsumer{}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		assert.Panics(t, func() {
+			consumer.StartAsGroup(ctx, handler)
+		})
+	})
+
+	t.Run("StartAsGroup Consume with error", func(t *testing.T) {
+		t.Cleanup(func() {
+			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+			handler = &internal.MockConsumerGroupHandler{}
+		})
+
+		consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			time.Sleep(1 * time.Second)
+			consumer.CloseGroup()
+		}()
+		consumer.StartAsGroup(ctx, handler)
+	})
+
+	//t.Run("StartAsGroup unknown error", func(t *testing.T) {
+	//	t.Cleanup(func() {
+	//		consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+	//		handler = &internal.MockConsumerGroupHandler{}
+	//	})
+	//
+	//	ctx, cancel := context.WithCancel(context.Background())
+	//	cancel()
+	//
+	//	consumer.StartAsGroup(ctx, handler)
+	//})
+}
+
+func TestStreamConsumer_StartAsGroupSelf(t *testing.T) {
+	origin := shared.Topic{"test", 3}
+	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+
+	t.Run("StartAsGroupSelf context canceled", func(t *testing.T) {
+		t.Cleanup(func() {
+			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+		})
+
+		consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(1 * time.Second)
+			cancel()
+		}()
+		consumer.StartAsGroupSelf(ctx)
+	})
+}
+
+func TestStreamConsumer_Transaction(t *testing.T) {
+	origin := shared.Topic{"test", 3}
+	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+
+	producer := &internal.MockAsyncProducer{}
+	//message := &internal.MockConsumerGroupClaim{}
+	session := &internal.MockConsumerGroupSession{}
+
+	t.Run("Transaction no problems", func(t *testing.T) {
+		consumerMsgKey := "key"
+		consumerMsgValue := "value"
+		msg := &sarama.ConsumerMessage{
+			Topic:     "test",
+			Partition: 1,
+			Key:       []byte(consumerMsgKey),
+			Value:     []byte(consumerMsgValue),
+			Offset:    0,
+		}
+
+		t.Run("No destinations", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				//message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
+
+			consumer.Transaction(producer, msg, session)
+
+			assert.Equal(t, 1, producer.BeginTxnCalled)
+			assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+			assert.Equal(t, 1, producer.CommitTxnCalled)
+
+			assert.Equal(t, 0, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
+		})
+
+		t.Run("With destinations", func(t *testing.T) {
+			t.Run("With Single destination", func(t *testing.T) {
+
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					//message = &sarama.ConsumerMessage{}
+					session = &internal.MockConsumerGroupSession{}
+					consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+					assert.Equal(t, 0, len(consumer.Destinations()))
+				})
+
+				consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
+				assert.Equal(t, 1, len(consumer.Destinations()))
+
+				producer.InputChan = make(chan *sarama.ProducerMessage, 1)
+				assert.NotPanics(t, func() {
+					// If channel is closed, it will cause panic.
+					consumer.Transaction(producer, msg, session)
+				})
+
+				claimed := <-producer.InputChan
+				value, err := claimed.Value.Encode()
+				assert.Nil(t, err)
+
+				assert.Equal(t, "test2", claimed.Topic)
+				assert.Equal(t, consumerMsgValue, string(value))
+
+				assert.Equal(t, 1, producer.BeginTxnCalled)
+				assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+				assert.Equal(t, 1, producer.CommitTxnCalled)
+
+				assert.Equal(t, 0, session.ResetOffsetCalled)
+				assert.Equal(t, 0, producer.AbortTxnCalled)
+			})
+
+			t.Run("With Multiple destinations", func(t *testing.T) {
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					//message = &sarama.ConsumerMessage{}
+					session = &internal.MockConsumerGroupSession{}
+					consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+					assert.Equal(t, 0, len(consumer.Destinations()))
+				})
+
+				consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
+				consumer.AddDestination(shared.Topic{"test3", 3}, &TestSerializer{})
+				assert.Equal(t, 2, len(consumer.Destinations()))
+
+				producer.InputChan = make(chan *sarama.ProducerMessage, 2)
+				assert.NotPanics(t, func() {
+					// If channel is closed, it will cause panic.
+					consumer.Transaction(producer, msg, session)
+				})
+
+				claimed := <-producer.InputChan
+				value, err := claimed.Value.Encode()
+				assert.Nil(t, err)
+
+				assert.Equal(t, "test2", claimed.Topic)
+				assert.Equal(t, consumerMsgValue, string(value))
+
+				claimed = <-producer.InputChan
+				value, err = claimed.Value.Encode()
+				assert.Nil(t, err)
+
+				assert.Equal(t, "test3", claimed.Topic)
+				assert.Equal(t, consumerMsgValue, string(value))
+
+				assert.Equal(t, 1, producer.BeginTxnCalled)
+				assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+				assert.Equal(t, 1, producer.CommitTxnCalled)
+
+				assert.Equal(t, 0, session.ResetOffsetCalled)
+				assert.Equal(t, 0, producer.AbortTxnCalled)
+			})
+
+			t.Run("Producer Input channel is closed", func(t *testing.T) {
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					//message = &sarama.ConsumerMessage{}
+					session = &internal.MockConsumerGroupSession{}
+					consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+					assert.Equal(t, 0, len(consumer.Destinations()))
+				})
+
+				consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
+				consumer.AddDestination(shared.Topic{"test3", 3}, &TestSerializer{})
+				assert.Equal(t, 2, len(consumer.Destinations()))
+
+				producer.InputChan = make(chan *sarama.ProducerMessage, 2)
+				close(producer.InputChan)
+				assert.Panics(t, func() {
+					// If channel is closed, it will cause panic.
+					consumer.Transaction(producer, msg, session)
+				})
+
+				assert.Equal(t, 1, producer.BeginTxnCalled)
+				assert.Equal(t, 0, producer.AddMessageToTxnCalled)
+				assert.Equal(t, 0, producer.CommitTxnCalled)
+
+				assert.Equal(t, 0, session.ResetOffsetCalled)
+				assert.Equal(t, 0, producer.AbortTxnCalled)
+			})
+		})
+	})
+
+	t.Run("Transaction BeginTxn with error", func(t *testing.T) {
+		t.Cleanup(func() {
+			producer = &internal.MockAsyncProducer{}
+			//message = &sarama.ConsumerMessage{}
+			session = &internal.MockConsumerGroupSession{}
+		})
+
+		msg := &sarama.ConsumerMessage{
 			Topic:     "test",
 			Partition: 1,
 			Key:       []byte("key"),
@@ -129,16 +392,287 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 			Offset:    0,
 		}
 
-		cancel()
-		time.Sleep(2 * time.Second)
+		t.Run("TxnStatusFlag is ProducerTxnFlagFatalError", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				//message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
 
-		mutex.Lock()
-		assert.True(t, exited)
-		mutex.Unlock()
+			producer.BeginTxnError = errors.New("error")
+			producer.TxnStatusFlag = sarama.ProducerTxnFlagFatalError
+
+			consumer.Transaction(producer, msg, session)
+
+			assert.Equal(t, 1, producer.BeginTxnCalled)
+			assert.Equal(t, 0, producer.AddMessageToTxnCalled)
+			assert.Equal(t, 0, producer.CommitTxnCalled)
+
+			assert.Equal(t, 1, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
+		})
+
+		t.Run("TxnStatusFlag is ProducerTxnFlagAbortableError", func(t *testing.T) {
+			t.Run("without error", func(t *testing.T) {
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					//message = &sarama.ConsumerMessage{}
+					session = &internal.MockConsumerGroupSession{}
+				})
+
+				producer.BeginTxnError = errors.New("error")
+				producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
+
+				consumer.Transaction(producer, msg, session)
+
+				assert.Equal(t, 1, producer.BeginTxnCalled)
+				assert.Equal(t, 0, producer.AddMessageToTxnCalled)
+				assert.Equal(t, 0, producer.CommitTxnCalled)
+
+				assert.Equal(t, 1, session.ResetOffsetCalled)
+				assert.Equal(t, 1, producer.AbortTxnCalled)
+			})
+
+			t.Run("AbortTxn with error", func(t *testing.T) {
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					//message = &sarama.ConsumerMessage{}
+					session = &internal.MockConsumerGroupSession{}
+				})
+
+				producer.BeginTxnError = errors.New("error")
+				producer.AbortTxnError = errors.New("error")
+				producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
+
+				consumer.Transaction(producer, msg, session)
+
+				assert.Equal(t, 1, producer.BeginTxnCalled)
+				assert.Equal(t, 0, producer.AddMessageToTxnCalled)
+				assert.Equal(t, 0, producer.CommitTxnCalled)
+
+				assert.Equal(t, 1, session.ResetOffsetCalled)
+				assert.Equal(t, 10, producer.AbortTxnCalled)
+			})
+		})
+
+		t.Run("Unknown error", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				//message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
+
+			producer.BeginTxnError = errors.New("error")
+
+			consumer.Transaction(producer, msg, session)
+
+			assert.Equal(t, 10, producer.BeginTxnCalled)
+			assert.Equal(t, 0, producer.AddMessageToTxnCalled)
+			assert.Equal(t, 0, producer.CommitTxnCalled)
+
+			assert.Equal(t, 0, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
+		})
+	})
+
+	t.Run("Transaction AddMessageToTxn with error", func(t *testing.T) {
+		t.Cleanup(func() {
+			producer = &internal.MockAsyncProducer{}
+			//message = &sarama.ConsumerMessage{}
+			session = &internal.MockConsumerGroupSession{}
+		})
+
+		msg := &sarama.ConsumerMessage{
+			Topic:     "test",
+			Partition: 1,
+			Key:       []byte("key"),
+			Value:     []byte("value"),
+			Offset:    0,
+		}
+
+		t.Run("TxnStatusFlag is ProducerTxnFlagFatalError", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				//message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
+
+			producer.AddMessageToTxnError = errors.New("error")
+			producer.TxnStatusFlag = sarama.ProducerTxnFlagFatalError
+
+			consumer.Transaction(producer, msg, session)
+
+			assert.Equal(t, 1, producer.BeginTxnCalled)
+			assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+			assert.Equal(t, 0, producer.CommitTxnCalled)
+
+			assert.Equal(t, 1, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
+		})
+
+		t.Run("TxnStatusFlag is ProducerTxnFlagAbortableError", func(t *testing.T) {
+			t.Run("without error", func(t *testing.T) {
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					//message = &sarama.ConsumerMessage{}
+					session = &internal.MockConsumerGroupSession{}
+				})
+
+				producer.AddMessageToTxnError = errors.New("error")
+				producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
+
+				consumer.Transaction(producer, msg, session)
+
+				assert.Equal(t, 1, producer.BeginTxnCalled)
+				assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+				assert.Equal(t, 0, producer.CommitTxnCalled)
+
+				assert.Equal(t, 1, session.ResetOffsetCalled)
+				assert.Equal(t, 1, producer.AbortTxnCalled)
+			})
+
+			t.Run("AbortTxn with error", func(t *testing.T) {
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					//message = &sarama.ConsumerMessage{}
+					session = &internal.MockConsumerGroupSession{}
+				})
+
+				producer.AddMessageToTxnError = errors.New("error")
+				producer.AbortTxnError = errors.New("error")
+				producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
+
+				consumer.Transaction(producer, msg, session)
+
+				assert.Equal(t, 1, producer.BeginTxnCalled)
+				assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+				assert.Equal(t, 0, producer.CommitTxnCalled)
+
+				assert.Equal(t, 1, session.ResetOffsetCalled)
+				assert.Equal(t, 10, producer.AbortTxnCalled)
+			})
+		})
+
+		t.Run("Unknown error", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				//message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
+
+			producer.AddMessageToTxnError = errors.New("error")
+
+			consumer.Transaction(producer, msg, session)
+
+			assert.Equal(t, 1, producer.BeginTxnCalled)
+			assert.Equal(t, 10, producer.AddMessageToTxnCalled)
+			assert.Equal(t, 0, producer.CommitTxnCalled)
+
+			assert.Equal(t, 0, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
+		})
+	})
+
+	t.Run("Transaction CommitTxn with error", func(t *testing.T) {
+		t.Cleanup(func() {
+			producer = &internal.MockAsyncProducer{}
+			//message = &sarama.ConsumerMessage{}
+			session = &internal.MockConsumerGroupSession{}
+		})
+
+		msg := &sarama.ConsumerMessage{
+			Topic:     "test",
+			Partition: 1,
+			Key:       []byte("key"),
+			Value:     []byte("value"),
+			Offset:    0,
+		}
+
+		t.Run("TxnStatusFlag is ProducerTxnFlagFatalError", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				//message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
+
+			producer.CommitTxnError = errors.New("error")
+			producer.TxnStatusFlag = sarama.ProducerTxnFlagFatalError
+
+			consumer.Transaction(producer, msg, session)
+
+			assert.Equal(t, 1, producer.BeginTxnCalled)
+			assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+			assert.Equal(t, 1, producer.CommitTxnCalled)
+
+			assert.Equal(t, 1, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
+		})
+
+		t.Run("TxnStatusFlag is ProducerTxnFlagAbortableError", func(t *testing.T) {
+			t.Run("without error", func(t *testing.T) {
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					//message = &sarama.ConsumerMessage{}
+					session = &internal.MockConsumerGroupSession{}
+				})
+
+				producer.CommitTxnError = errors.New("error")
+				producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
+
+				consumer.Transaction(producer, msg, session)
+
+				assert.Equal(t, 1, producer.BeginTxnCalled)
+				assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+				assert.Equal(t, 1, producer.CommitTxnCalled)
+
+				assert.Equal(t, 1, session.ResetOffsetCalled)
+				assert.Equal(t, 1, producer.AbortTxnCalled)
+			})
+
+			t.Run("AbortTxn with error", func(t *testing.T) {
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					//message = &sarama.ConsumerMessage{}
+					session = &internal.MockConsumerGroupSession{}
+				})
+
+				producer.CommitTxnError = errors.New("error")
+				producer.AbortTxnError = errors.New("error")
+				producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
+
+				consumer.Transaction(producer, msg, session)
+
+				assert.Equal(t, 1, producer.BeginTxnCalled)
+				assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+				assert.Equal(t, 1, producer.CommitTxnCalled)
+
+				assert.Equal(t, 1, session.ResetOffsetCalled)
+				assert.Equal(t, 10, producer.AbortTxnCalled)
+			})
+		})
+
+		t.Run("Unknown error", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				//message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
+
+			producer.CommitTxnError = errors.New("error")
+
+			consumer.Transaction(producer, msg, session)
+
+			assert.Equal(t, 1, producer.BeginTxnCalled)
+			assert.Equal(t, 2, producer.AddMessageToTxnCalled)
+			assert.Equal(t, 1, producer.CommitTxnCalled)
+
+			assert.Equal(t, 0, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
+		})
 	})
 }
 
-func TestHandleTxnError(t *testing.T) {
+func TestStreamConsumer_HandleTxnError(t *testing.T) {
 	origin := shared.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
@@ -146,13 +680,13 @@ func TestHandleTxnError(t *testing.T) {
 	message := &sarama.ConsumerMessage{}
 	session := &internal.MockConsumerGroupSession{}
 
-	t.Cleanup(func() {
-		session = &internal.MockConsumerGroupSession{}
-		producer = &internal.MockAsyncProducer{}
-		message = &sarama.ConsumerMessage{}
-	})
-
 	t.Run("HandleTxnError with error", func(t *testing.T) {
+		t.Cleanup(func() {
+			producer = &internal.MockAsyncProducer{}
+			message = &sarama.ConsumerMessage{}
+			session = &internal.MockConsumerGroupSession{}
+		})
+
 		functionCalledCount := 0
 		testFunction := func() {
 			functionCalledCount++
@@ -162,17 +696,22 @@ func TestHandleTxnError(t *testing.T) {
 			testFunction()
 			return nil
 		})
-		assert.False(t, session.ResetOffsetCalled)
-		assert.False(t, producer.AbortTxnCalled)
+		assert.Equal(t, 0, session.ResetOffsetCalled)
+		assert.Equal(t, 0, producer.AbortTxnCalled)
 
 		assert.Equal(t, 1, functionCalledCount)
 	})
 
 	t.Run("HandleTxnError with error, called defaulthandler function several times for retry", func(t *testing.T) {
+		t.Cleanup(func() {
+			producer = &internal.MockAsyncProducer{}
+			message = &sarama.ConsumerMessage{}
+			session = &internal.MockConsumerGroupSession{}
+		})
+
 		functionCalledCount := 0
 		testFunction := func() error {
 			functionCalledCount++
-
 			if functionCalledCount == 10 {
 				return nil
 			}
@@ -181,13 +720,19 @@ func TestHandleTxnError(t *testing.T) {
 		}
 
 		consumer.HandleTxnError(producer, message, session, nil, testFunction)
-		assert.False(t, session.ResetOffsetCalled)
-		assert.False(t, producer.AbortTxnCalled)
+		assert.Equal(t, 0, session.ResetOffsetCalled)
+		assert.Equal(t, 0, producer.AbortTxnCalled)
 
 		assert.Equal(t, 10, functionCalledCount)
 	})
 
 	t.Run("HandleTxnError with ProducerTxnFlagInError", func(t *testing.T) {
+		t.Cleanup(func() {
+			producer = &internal.MockAsyncProducer{}
+			message = &sarama.ConsumerMessage{}
+			session = &internal.MockConsumerGroupSession{}
+		})
+
 		functionCalledCount := 0
 		testFunction := func() {
 			functionCalledCount++
@@ -199,13 +744,19 @@ func TestHandleTxnError(t *testing.T) {
 			testFunction()
 			return nil
 		})
-		assert.True(t, session.ResetOffsetCalled)
-		assert.False(t, producer.AbortTxnCalled)
+		assert.Equal(t, 1, session.ResetOffsetCalled)
+		assert.Equal(t, 0, producer.AbortTxnCalled)
 
 		assert.Equal(t, 0, functionCalledCount)
 	})
 
 	t.Run("HandleTxnError with ProducerTxnFlagAbortableError", func(t *testing.T) {
+		t.Cleanup(func() {
+			producer = &internal.MockAsyncProducer{}
+			message = &sarama.ConsumerMessage{}
+			session = &internal.MockConsumerGroupSession{}
+		})
+
 		functionCalledCount := 0
 		testFunction := func() {
 			functionCalledCount++
@@ -217,8 +768,8 @@ func TestHandleTxnError(t *testing.T) {
 			testFunction()
 			return nil
 		})
-		assert.True(t, session.ResetOffsetCalled)
-		assert.True(t, producer.AbortTxnCalled)
+		assert.Equal(t, 1, session.ResetOffsetCalled)
+		assert.Equal(t, 1, producer.AbortTxnCalled)
 
 		assert.Equal(t, 0, functionCalledCount)
 	})
