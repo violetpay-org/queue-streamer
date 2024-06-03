@@ -106,7 +106,7 @@ func (consumer *StreamConsumer) StartAsGroup(ctx context.Context) {
 		// `Consume` should be called inside an infinite loop, when a
 		// server-side rebalance happens, the consumer session will need to be
 		// recreated to get the new claims
-		if err := client.Consume(ctx, []string{consumer.origin.Name()}, consumer); err != nil {
+		if err := client.Consume(ctx, []string{consumer.origin.Name}, consumer); err != nil {
 			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 				return
 			}
@@ -134,7 +134,7 @@ func (consumer *StreamConsumer) Setup(session sarama.ConsumerGroupSession) error
 		panic("No config")
 	}
 
-	if consumer.origin.Name() == "" || consumer.origin.Partition() < 1 {
+	if consumer.origin.Name == "" || consumer.origin.Partition < 1 {
 		panic("No origin or partition")
 	}
 
@@ -167,7 +167,10 @@ func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 			}
 
 			func() {
-				topic := shared.NewTopic(msg.Topic, msg.Partition)
+				topic := shared.Topic{
+					Name:      msg.Topic,
+					Partition: msg.Partition,
+				}
 
 				producer := consumer.producerPool.Take(topic)
 				defer consumer.producerPool.Return(producer, topic)
@@ -185,13 +188,13 @@ func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 				for i, destination := range consumer.dests {
 					// Produce the message
 					producer.Input() <- &sarama.ProducerMessage{
-						Topic: destination.Name(),
+						Topic: destination.Name,
 						Value: sarama.ByteEncoder(
 							consumer.mss[i].MessageToProduceMessage(string(msg.Value)),
 						),
 					}
 
-					fmt.Println("Message produced:", destination.Name(), msg.Key, msg.Value)
+					fmt.Println("Message produced:", destination.Name, msg.Key, msg.Value)
 				}
 
 				// Add the message to the transaction
