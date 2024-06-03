@@ -163,6 +163,9 @@ func TestHandleTxnError(t *testing.T) {
 			return nil
 		})
 		assert.False(t, session.ResetOffsetCalled)
+		assert.False(t, producer.AbortTxnCalled)
+
+		assert.Equal(t, 1, functionCalledCount)
 	})
 
 	t.Run("HandleTxnError with error, called defaulthandler function several times for retry", func(t *testing.T) {
