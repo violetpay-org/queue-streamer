@@ -23,14 +23,14 @@ func (ts *TestSerializer) MessageToProduceMessage(value string) string {
 }
 
 func TestStreamConsumer_AddDestination(t *testing.T) {
-	origin := shared.NewTopic("test", 3)
+	origin := shared.Topic{Name: "test", Partition: 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
-	consumer.AddDestination(shared.NewTopic("test2", 3), &TestSerializer{})
+	consumer.AddDestination(shared.Topic{Name: "test2", Partition: 3}, &TestSerializer{})
 	assert.Equal(t, 1, len(consumer.Destinations()))
 	assert.Equal(t, 1, len(consumer.MessageSerializers()))
 
-	consumer.AddDestination(shared.NewTopic("test3", 3), &TestSerializer{})
+	consumer.AddDestination(shared.Topic{Name: "test3", Partition: 3}, &TestSerializer{})
 	assert.Equal(t, 2, len(consumer.Destinations()))
 	assert.Equal(t, 2, len(consumer.MessageSerializers()))
 
@@ -78,10 +78,10 @@ func (t *MockConsumerGroupSession) Context() context.Context {
 
 func TestStreamConsumer_Setup(t *testing.T) {
 	sess := &MockConsumerGroupSession{}
-	origin := shared.NewTopic("test", 3)
+	origin := shared.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
-	consumer.AddDestination(shared.NewTopic("test2", 3), &TestSerializer{})
+	consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
 	assert.Equal(t, 1, len(consumer.Destinations()))
 
 	assert.NotPanics(t, func() {
@@ -120,7 +120,7 @@ func (t *MockConsumerGroupClaim) Messages() <-chan *sarama.ConsumerMessage {
 }
 
 func TestStreamConsumer_ConsumeClaim(t *testing.T) {
-	origin := shared.NewTopic("test", 3)
+	origin := shared.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
 	//producerPool := internal.NewProducerPool(cbrokers, func() *sarama.Config {
@@ -244,7 +244,7 @@ func (t *MockAsyncProducer) AddMessageToTxn(msg *sarama.ConsumerMessage, groupId
 }
 
 func TestHandleTxnError(t *testing.T) {
-	origin := shared.NewTopic("test", 3)
+	origin := shared.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
 	producer := &MockAsyncProducer{}

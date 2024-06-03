@@ -7,10 +7,10 @@ type StreamConfig struct {
 	topic shared.Topic
 }
 
-func NewStreamConfig(ms shared.MessageSerializer, topic shared.Topic) StreamConfig {
+func NewStreamConfig(ms shared.MessageSerializer, topic Topic) StreamConfig {
 	return StreamConfig{
 		ms:    ms,
-		topic: topic,
+		topic: convertTopic(topic),
 	}
 }
 

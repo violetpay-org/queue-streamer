@@ -15,7 +15,7 @@ func TestProducerPool_Take(t *testing.T) {
 		return sarama.NewConfig()
 	})
 
-	topic := shared.NewTopic("test", 3)
+	topic := shared.Topic{Name: "test", Partition: 3}
 
 	producer := pool.Take(topic)
 	assert.NotNil(t, &producer)
@@ -31,7 +31,7 @@ func TestProducerPool_Return(t *testing.T) {
 		return sarama.NewConfig()
 	})
 
-	topic := shared.NewTopic("test", 3)
+	topic := shared.Topic{Name: "test", Partition: 3}
 
 	producer := pool.Take(topic)
 	assert.NotNil(t, &producer)

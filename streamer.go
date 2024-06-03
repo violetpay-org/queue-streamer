@@ -21,7 +21,7 @@ type TopicStreamer struct {
 //   - ts := NewTopicStreamer(brokers, topic)
 //   - ts := NewTopicStreamer(brokers, topic, consumerConfig, producerConfig)
 //   - ts := NewTopicStreamer(brokers, topic, nil, producerConfig)
-func NewTopicStreamer(brokers []string, topic shared.Topic, args ...interface{}) *TopicStreamer {
+func NewTopicStreamer(brokers []string, topic Topic, args ...interface{}) *TopicStreamer {
 	var ccfg *sarama.Config
 	var pcfg *sarama.Config
 
@@ -44,7 +44,7 @@ func NewTopicStreamer(brokers []string, topic shared.Topic, args ...interface{})
 	}
 
 	consumer := internal.NewStreamConsumer(
-		topic,
+		convertTopic(topic),
 		"groupId",
 		brokers,
 		ccfg,
@@ -52,15 +52,27 @@ func NewTopicStreamer(brokers []string, topic shared.Topic, args ...interface{})
 	)
 
 	return &TopicStreamer{
-		topic:    topic,
+		topic:    convertTopic(topic),
 		configs:  make([]StreamConfig, 0),
 		cancel:   nil,
 		consumer: consumer,
 	}
 }
 
-func (ts *TopicStreamer) AddConfig(spec StreamConfig) {
-	ts.configs = append(ts.configs, spec)
+func (ts *TopicStreamer) Topic() shared.Topic {
+	return ts.topic
+}
+
+func (ts *TopicStreamer) Consumer() *internal.StreamConsumer {
+	return ts.consumer
+}
+
+func (ts *TopicStreamer) Configs() []StreamConfig {
+	return ts.configs
+}
+
+func (ts *TopicStreamer) AddConfig(config StreamConfig) {
+	ts.configs = append(ts.configs, config)
 }
 
 func (ts *TopicStreamer) Run() {
@@ -99,8 +111,4 @@ func (ts *TopicStreamer) run(dests []shared.Topic, serializers []shared.MessageS
 
 func (ts *TopicStreamer) Stop() {
 	ts.cancel()
-}
-
-func NewTopic(name string, partition int32) shared.Topic {
-	return shared.NewTopic(name, partition)
 }
