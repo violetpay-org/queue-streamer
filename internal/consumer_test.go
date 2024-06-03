@@ -39,8 +39,8 @@ func TestStreamConsumer_AddDestination(t *testing.T) {
 
 // MockConsumerGroupSession is a mock implementation of sarama.ConsumerGroupSession
 type MockConsumerGroupSession struct {
-	ctx               context.Context
-	resetOffsetCalled bool
+	Ctx               context.Context
+	ResetOffsetCalled bool
 }
 
 func (t *MockConsumerGroupSession) Claims() map[string][]int32 {
@@ -64,7 +64,7 @@ func (t *MockConsumerGroupSession) Commit() {
 }
 
 func (t *MockConsumerGroupSession) ResetOffset(topic string, partition int32, offset int64, metadata string) {
-	t.resetOffsetCalled = true
+	t.ResetOffsetCalled = true
 	return
 }
 
@@ -73,7 +73,7 @@ func (t *MockConsumerGroupSession) MarkMessage(msg *sarama.ConsumerMessage, meta
 }
 
 func (t *MockConsumerGroupSession) Context() context.Context {
-	return t.ctx
+	return t.Ctx
 }
 
 func TestStreamConsumer_Setup(t *testing.T) {
@@ -120,8 +120,9 @@ func (t *MockConsumerGroupClaim) Messages() <-chan *sarama.ConsumerMessage {
 }
 
 func TestStreamConsumer_ConsumeClaim(t *testing.T) {
-	origin := shared.Topic{"test", 3}
+	origin := shared.Topic{Name: "test", Partition: 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+	sess := &MockConsumerGroupSession{}
 
 	//producerPool := internal.NewProducerPool(cbrokers, func() *sarama.Config {
 	//	return sarama.NewConfig()
@@ -129,9 +130,13 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 
 	//producer := producerPool.Take(origin)
 
+	t.Cleanup(func() {
+		sess = &MockConsumerGroupSession{}
+	})
+
 	t.Run("ConsumeClaim Gracefully shutdown", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		sess := &MockConsumerGroupSession{ctx: ctx}
+		sess.Ctx = ctx
 
 		exited := false
 		mutex := &sync.Mutex{}
@@ -151,7 +156,7 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 
 	t.Run("ConsumeClaim Consume message", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		sess := &MockConsumerGroupSession{ctx: ctx}
+		sess.Ctx = ctx
 
 		msg := &MockConsumerGroupClaim{
 			DataChan: make(chan *sarama.ConsumerMessage, 1),
@@ -181,7 +186,7 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 		}
 
 		cancel()
-		time.Sleep(5 * time.Second)
+		time.Sleep(2 * time.Second)
 
 		mutex.Lock()
 		assert.True(t, exited)
@@ -267,7 +272,7 @@ func TestHandleTxnError(t *testing.T) {
 			testFunction()
 			return nil
 		})
-		assert.False(t, session.resetOffsetCalled)
+		assert.False(t, session.ResetOffsetCalled)
 	})
 
 	t.Run("HandleTxnError with error, called defaulthandler function several times for retry", func(t *testing.T) {
@@ -283,7 +288,7 @@ func TestHandleTxnError(t *testing.T) {
 		}
 
 		consumer.HandleTxnError(producer, message, session, nil, testFunction)
-		assert.False(t, session.resetOffsetCalled)
+		assert.False(t, session.ResetOffsetCalled)
 		assert.False(t, producer.AbortTxnCalled)
 
 		assert.Equal(t, 10, functionCalledCount)
@@ -295,7 +300,7 @@ func TestHandleTxnError(t *testing.T) {
 		consumer.HandleTxnError(producer, message, session, nil, func() error {
 			return nil
 		})
-		assert.True(t, session.resetOffsetCalled)
+		assert.True(t, session.ResetOffsetCalled)
 		assert.False(t, producer.AbortTxnCalled)
 	})
 
@@ -305,7 +310,7 @@ func TestHandleTxnError(t *testing.T) {
 		consumer.HandleTxnError(producer, message, session, nil, func() error {
 			return nil
 		})
-		assert.True(t, session.resetOffsetCalled)
+		assert.True(t, session.ResetOffsetCalled)
 		assert.True(t, producer.AbortTxnCalled)
 	})
 
