@@ -42,21 +42,35 @@ func TestProducerPool_Close(t *testing.T) {
 }
 
 func TestProducerPool_Take(t *testing.T) {
+	topic := shared.Topic{Name: "test", Partition: 3}
 	pool := internal.NewProducerPool(pbrokers, func() *sarama.Config {
 		return sarama.NewConfig()
 	})
+	var producer sarama.AsyncProducer
 
-	topic := shared.Topic{Name: "test", Partition: 3}
+	t.Run("Take", func(t *testing.T) {
+		t.Cleanup(func() {
+			pool = internal.NewProducerPool(pbrokers, func() *sarama.Config {
+				return sarama.NewConfig()
+			})
+		})
 
-	producer := pool.Take(topic)
-	assert.NotNil(t, &producer)
+		producer = pool.Take(topic)
+		assert.NotNil(t, &producer)
 
-	producers := pool.Producers()
-	assert.NotNil(t, &producers)
+		producers := pool.Producers()
+		assert.NotNil(t, &producers)
 
-	assert.Equal(t, 0, len(producers[topic]))
+		assert.Equal(t, 0, len(producers[topic]))
+	})
 
-	t.Run("fail to generate producer", func(t *testing.T) {
+	t.Run("Take with error when generate producer", func(t *testing.T) {
+		t.Cleanup(func() {
+			pool = internal.NewProducerPool(pbrokers, func() *sarama.Config {
+				return sarama.NewConfig()
+			})
+		})
+
 		pool = internal.NewProducerPool(pbrokers, func() *sarama.Config {
 			return &sarama.Config{}
 		})
@@ -67,27 +81,34 @@ func TestProducerPool_Take(t *testing.T) {
 }
 
 func TestProducerPool_Return(t *testing.T) {
+	topic := shared.Topic{Name: "test", Partition: 3}
 	pool := internal.NewProducerPool(pbrokers, func() *sarama.Config {
 		return sarama.NewConfig()
 	})
 
-	topic := shared.Topic{Name: "test", Partition: 3}
+	t.Run("Return", func(t *testing.T) {
+		t.Cleanup(func() {
+			pool = internal.NewProducerPool(pbrokers, func() *sarama.Config {
+				return sarama.NewConfig()
+			})
+		})
 
-	producer := pool.Take(topic)
-	assert.NotNil(t, &producer)
+		producer := pool.Take(topic)
+		assert.NotNil(t, &producer)
 
-	pool.Return(producer, topic)
+		pool.Return(producer, topic)
 
-	producers := pool.Producers()
-	assert.NotNil(t, &producers)
+		producers := pool.Producers()
+		assert.NotNil(t, &producers)
 
-	assert.Equal(t, 1, len(producers[topic]))
+		assert.Equal(t, 1, len(producers[topic]))
 
-	pool.Return(nil, topic)
-	assert.Equal(t, 1, len(producers[topic]))
+		pool.Return(nil, topic)
+		assert.Equal(t, 1, len(producers[topic]))
 
-	producer = pool.Take(topic)
-	assert.Equal(t, 0, len(producers[topic]))
+		producer = pool.Take(topic)
+		assert.Equal(t, 0, len(producers[topic]))
+	})
 
 	//t.Run("Return closed producer", func(t *testing.T) {
 	//	assert.Equal(t, 0, len(producers[topic]))
@@ -103,7 +124,14 @@ func TestProducerPool_Return(t *testing.T) {
 	//})
 
 	t.Run("Return txError producer", func(t *testing.T) {
+		t.Cleanup(func() {
+			pool = internal.NewProducerPool(pbrokers, func() *sarama.Config {
+				return sarama.NewConfig()
+			})
+		})
+
 		producer := &internal.MockAsyncProducer{TxnStatusFlag: sarama.ProducerTxnFlagInError}
+		producers := pool.Producers()
 
 		pool.Return(producer, topic)
 		assert.Equal(t, 0, len(producers[topic]))

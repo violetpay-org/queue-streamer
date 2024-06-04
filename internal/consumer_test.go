@@ -26,6 +26,10 @@ func TestStreamConsumer_AddDestination(t *testing.T) {
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
 	t.Run("AddDestination", func(t *testing.T) {
+		t.Cleanup(func() {
+			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+		})
+
 		consumer.AddDestination(shared.Topic{Name: "test2", Partition: 3}, &TestSerializer{})
 		assert.Equal(t, 1, len(consumer.Destinations()))
 		assert.Equal(t, 1, len(consumer.MessageSerializers()))
@@ -162,7 +166,6 @@ func TestStreamConsumer_StartAsGroup(t *testing.T) {
 			handler = &internal.MockConsumerGroupHandler{}
 		})
 
-		consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
 			time.Sleep(1 * time.Second)
@@ -225,7 +228,6 @@ func TestStreamConsumer_StartAsGroupSelf(t *testing.T) {
 			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 		})
 
-		consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
 			time.Sleep(1 * time.Second)
@@ -240,10 +242,9 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
 	producer := &internal.MockAsyncProducer{}
-	//message := &internal.MockConsumerGroupClaim{}
 	session := &internal.MockConsumerGroupSession{}
 
-	t.Run("Transaction no problems", func(t *testing.T) {
+	t.Run("Transaction", func(t *testing.T) {
 		consumerMsgKey := "key"
 		consumerMsgValue := "value"
 		msg := &sarama.ConsumerMessage{
@@ -257,7 +258,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 		t.Run("No destinations", func(t *testing.T) {
 			t.Cleanup(func() {
 				producer = &internal.MockAsyncProducer{}
-				//message = &sarama.ConsumerMessage{}
 				session = &internal.MockConsumerGroupSession{}
 			})
 
@@ -273,10 +273,8 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 
 		t.Run("With destinations", func(t *testing.T) {
 			t.Run("With Single destination", func(t *testing.T) {
-
 				t.Cleanup(func() {
 					producer = &internal.MockAsyncProducer{}
-					//message = &sarama.ConsumerMessage{}
 					session = &internal.MockConsumerGroupSession{}
 					consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 					assert.Equal(t, 0, len(consumer.Destinations()))
@@ -309,7 +307,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 			t.Run("With Multiple destinations", func(t *testing.T) {
 				t.Cleanup(func() {
 					producer = &internal.MockAsyncProducer{}
-					//message = &sarama.ConsumerMessage{}
 					session = &internal.MockConsumerGroupSession{}
 					consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 					assert.Equal(t, 0, len(consumer.Destinations()))
@@ -350,7 +347,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 			t.Run("Producer Input channel is closed", func(t *testing.T) {
 				t.Cleanup(func() {
 					producer = &internal.MockAsyncProducer{}
-					//message = &sarama.ConsumerMessage{}
 					session = &internal.MockConsumerGroupSession{}
 					consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 					assert.Equal(t, 0, len(consumer.Destinations()))
@@ -380,7 +376,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 	t.Run("Transaction BeginTxn with error", func(t *testing.T) {
 		t.Cleanup(func() {
 			producer = &internal.MockAsyncProducer{}
-			//message = &sarama.ConsumerMessage{}
 			session = &internal.MockConsumerGroupSession{}
 		})
 
@@ -395,7 +390,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 		t.Run("TxnStatusFlag is ProducerTxnFlagFatalError", func(t *testing.T) {
 			t.Cleanup(func() {
 				producer = &internal.MockAsyncProducer{}
-				//message = &sarama.ConsumerMessage{}
 				session = &internal.MockConsumerGroupSession{}
 			})
 
@@ -416,7 +410,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 			t.Run("without error", func(t *testing.T) {
 				t.Cleanup(func() {
 					producer = &internal.MockAsyncProducer{}
-					//message = &sarama.ConsumerMessage{}
 					session = &internal.MockConsumerGroupSession{}
 				})
 
@@ -436,7 +429,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 			t.Run("AbortTxn with error", func(t *testing.T) {
 				t.Cleanup(func() {
 					producer = &internal.MockAsyncProducer{}
-					//message = &sarama.ConsumerMessage{}
 					session = &internal.MockConsumerGroupSession{}
 				})
 
@@ -458,7 +450,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 		t.Run("Unknown error", func(t *testing.T) {
 			t.Cleanup(func() {
 				producer = &internal.MockAsyncProducer{}
-				//message = &sarama.ConsumerMessage{}
 				session = &internal.MockConsumerGroupSession{}
 			})
 
@@ -478,7 +469,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 	t.Run("Transaction AddMessageToTxn with error", func(t *testing.T) {
 		t.Cleanup(func() {
 			producer = &internal.MockAsyncProducer{}
-			//message = &sarama.ConsumerMessage{}
 			session = &internal.MockConsumerGroupSession{}
 		})
 
@@ -493,7 +483,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 		t.Run("TxnStatusFlag is ProducerTxnFlagFatalError", func(t *testing.T) {
 			t.Cleanup(func() {
 				producer = &internal.MockAsyncProducer{}
-				//message = &sarama.ConsumerMessage{}
 				session = &internal.MockConsumerGroupSession{}
 			})
 
@@ -514,7 +503,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 			t.Run("without error", func(t *testing.T) {
 				t.Cleanup(func() {
 					producer = &internal.MockAsyncProducer{}
-					//message = &sarama.ConsumerMessage{}
 					session = &internal.MockConsumerGroupSession{}
 				})
 
@@ -534,7 +522,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 			t.Run("AbortTxn with error", func(t *testing.T) {
 				t.Cleanup(func() {
 					producer = &internal.MockAsyncProducer{}
-					//message = &sarama.ConsumerMessage{}
 					session = &internal.MockConsumerGroupSession{}
 				})
 
@@ -556,7 +543,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 		t.Run("Unknown error", func(t *testing.T) {
 			t.Cleanup(func() {
 				producer = &internal.MockAsyncProducer{}
-				//message = &sarama.ConsumerMessage{}
 				session = &internal.MockConsumerGroupSession{}
 			})
 
@@ -576,7 +562,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 	t.Run("Transaction CommitTxn with error", func(t *testing.T) {
 		t.Cleanup(func() {
 			producer = &internal.MockAsyncProducer{}
-			//message = &sarama.ConsumerMessage{}
 			session = &internal.MockConsumerGroupSession{}
 		})
 
@@ -591,7 +576,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 		t.Run("TxnStatusFlag is ProducerTxnFlagFatalError", func(t *testing.T) {
 			t.Cleanup(func() {
 				producer = &internal.MockAsyncProducer{}
-				//message = &sarama.ConsumerMessage{}
 				session = &internal.MockConsumerGroupSession{}
 			})
 
@@ -612,7 +596,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 			t.Run("without error", func(t *testing.T) {
 				t.Cleanup(func() {
 					producer = &internal.MockAsyncProducer{}
-					//message = &sarama.ConsumerMessage{}
 					session = &internal.MockConsumerGroupSession{}
 				})
 
@@ -632,7 +615,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 			t.Run("AbortTxn with error", func(t *testing.T) {
 				t.Cleanup(func() {
 					producer = &internal.MockAsyncProducer{}
-					//message = &sarama.ConsumerMessage{}
 					session = &internal.MockConsumerGroupSession{}
 				})
 
@@ -654,7 +636,6 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 		t.Run("Unknown error", func(t *testing.T) {
 			t.Cleanup(func() {
 				producer = &internal.MockAsyncProducer{}
-				//message = &sarama.ConsumerMessage{}
 				session = &internal.MockConsumerGroupSession{}
 			})
 
@@ -680,98 +661,105 @@ func TestStreamConsumer_HandleTxnError(t *testing.T) {
 	message := &sarama.ConsumerMessage{}
 	session := &internal.MockConsumerGroupSession{}
 
-	t.Run("HandleTxnError with error", func(t *testing.T) {
+	t.Run("HandleTxnError", func(t *testing.T) {
 		t.Cleanup(func() {
 			producer = &internal.MockAsyncProducer{}
 			message = &sarama.ConsumerMessage{}
 			session = &internal.MockConsumerGroupSession{}
 		})
 
-		functionCalledCount := 0
-		testFunction := func() {
-			functionCalledCount++
-		}
+		t.Run("Called defaulthandler function", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
 
-		consumer.HandleTxnError(producer, message, session, nil, func() error {
-			testFunction()
-			return nil
-		})
-		assert.Equal(t, 0, session.ResetOffsetCalled)
-		assert.Equal(t, 0, producer.AbortTxnCalled)
-
-		assert.Equal(t, 1, functionCalledCount)
-	})
-
-	t.Run("HandleTxnError with error, called defaulthandler function several times for retry", func(t *testing.T) {
-		t.Cleanup(func() {
-			producer = &internal.MockAsyncProducer{}
-			message = &sarama.ConsumerMessage{}
-			session = &internal.MockConsumerGroupSession{}
-		})
-
-		functionCalledCount := 0
-		testFunction := func() error {
-			functionCalledCount++
-			if functionCalledCount == 10 {
-				return nil
+			functionCalledCount := 0
+			testFunction := func() {
+				functionCalledCount++
 			}
 
-			return errors.New("error")
-		}
+			consumer.HandleTxnError(producer, message, session, nil, func() error {
+				testFunction()
+				return nil
+			})
+			assert.Equal(t, 0, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
 
-		consumer.HandleTxnError(producer, message, session, nil, testFunction)
-		assert.Equal(t, 0, session.ResetOffsetCalled)
-		assert.Equal(t, 0, producer.AbortTxnCalled)
+			assert.Equal(t, 1, functionCalledCount)
+		})
 
-		assert.Equal(t, 10, functionCalledCount)
+		t.Run("Called defaulthandler function several times for retry", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
+
+			functionCalledCount := 0
+			testFunction := func() error {
+				functionCalledCount++
+				if functionCalledCount == 10 {
+					return nil
+				}
+
+				return errors.New("error")
+			}
+
+			consumer.HandleTxnError(producer, message, session, nil, testFunction)
+			assert.Equal(t, 0, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
+
+			assert.Equal(t, 10, functionCalledCount)
+		})
+
+		t.Run("HandleTxnError with ProducerTxnFlagInError", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
+
+			functionCalledCount := 0
+			testFunction := func() {
+				functionCalledCount++
+			}
+
+			producer.TxnStatusFlag = sarama.ProducerTxnFlagFatalError
+
+			consumer.HandleTxnError(producer, message, session, nil, func() error {
+				testFunction()
+				return nil
+			})
+			assert.Equal(t, 1, session.ResetOffsetCalled)
+			assert.Equal(t, 0, producer.AbortTxnCalled)
+
+			assert.Equal(t, 0, functionCalledCount)
+		})
+
+		t.Run("HandleTxnError with ProducerTxnFlagAbortableError", func(t *testing.T) {
+			t.Cleanup(func() {
+				producer = &internal.MockAsyncProducer{}
+				message = &sarama.ConsumerMessage{}
+				session = &internal.MockConsumerGroupSession{}
+			})
+
+			functionCalledCount := 0
+			testFunction := func() {
+				functionCalledCount++
+			}
+
+			producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
+
+			consumer.HandleTxnError(producer, message, session, nil, func() error {
+				testFunction()
+				return nil
+			})
+			assert.Equal(t, 1, session.ResetOffsetCalled)
+			assert.Equal(t, 1, producer.AbortTxnCalled)
+
+			assert.Equal(t, 0, functionCalledCount)
+		})
 	})
-
-	t.Run("HandleTxnError with ProducerTxnFlagInError", func(t *testing.T) {
-		t.Cleanup(func() {
-			producer = &internal.MockAsyncProducer{}
-			message = &sarama.ConsumerMessage{}
-			session = &internal.MockConsumerGroupSession{}
-		})
-
-		functionCalledCount := 0
-		testFunction := func() {
-			functionCalledCount++
-		}
-
-		producer.TxnStatusFlag = sarama.ProducerTxnFlagFatalError
-
-		consumer.HandleTxnError(producer, message, session, nil, func() error {
-			testFunction()
-			return nil
-		})
-		assert.Equal(t, 1, session.ResetOffsetCalled)
-		assert.Equal(t, 0, producer.AbortTxnCalled)
-
-		assert.Equal(t, 0, functionCalledCount)
-	})
-
-	t.Run("HandleTxnError with ProducerTxnFlagAbortableError", func(t *testing.T) {
-		t.Cleanup(func() {
-			producer = &internal.MockAsyncProducer{}
-			message = &sarama.ConsumerMessage{}
-			session = &internal.MockConsumerGroupSession{}
-		})
-
-		functionCalledCount := 0
-		testFunction := func() {
-			functionCalledCount++
-		}
-
-		producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
-
-		consumer.HandleTxnError(producer, message, session, nil, func() error {
-			testFunction()
-			return nil
-		})
-		assert.Equal(t, 1, session.ResetOffsetCalled)
-		assert.Equal(t, 1, producer.AbortTxnCalled)
-
-		assert.Equal(t, 0, functionCalledCount)
-	})
-
 }
