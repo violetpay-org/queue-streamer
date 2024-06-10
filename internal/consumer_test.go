@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-var cbrokers = []string{"b-3.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-2.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-1.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092"}
+var cbrokers = []string{"localhost:9093"}
 
 // TestSerializer is a mock implementation of common.MessageSerializer
 type TestSerializer struct {

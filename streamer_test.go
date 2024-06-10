@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-var brokers = []string{"b-3.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-2.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-1.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092"}
-var topic = qstreamer.Topic("testtopic", 1)
+var brokers = []string{"localhost:9092"}
+var topic = qstreamer.Topic("test", 1)
 
 func TestTopicStreamer_NewTopicStreamer(t *testing.T) {
 	var streamer *qstreamer.TopicStreamer
@@ -172,7 +172,7 @@ func TestTopicStreamer_Run(t *testing.T) {
 		})
 
 		streamer = qstreamer.NewTopicStreamer(brokers, topic)
-		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{Name: "testtopic"})
+		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{Name: "test1"})
 		streamer.AddConfig(config)
 
 		assert.Panics(t, func() {
@@ -196,7 +196,7 @@ func TestTopicStreamer_Run(t *testing.T) {
 }
 
 func TestTopic(t *testing.T) {
-	topicc := qstreamer.Topic("testtopicName", 1)
-	assert.Equal(t, "testtopicName", topicc.Name)
+	topicc := qstreamer.Topic("test2", 1)
+	assert.Equal(t, "test2", topicc.Name)
 	assert.Equal(t, int32(1), topicc.Partition)
 }
