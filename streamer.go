@@ -26,8 +26,7 @@ func NewTopicStreamer(brokers []string, topic common.Topic, args ...interface{})
 	var pcfg *sarama.Config
 
 	switch len(args) {
-	case 1:
-		panic("Invalid number of arguments")
+	case 0: // do nothing
 	case 2:
 		consumerConfig, ok := args[0].(*sarama.Config)
 		if ok || consumerConfig != nil {
@@ -39,8 +38,7 @@ func NewTopicStreamer(brokers []string, topic common.Topic, args ...interface{})
 			pcfg = producerConfig
 		}
 	default:
-		ccfg = nil
-		pcfg = nil
+		panic("Invalid number of arguments")
 	}
 
 	consumer := internal.NewStreamConsumer(
@@ -79,6 +77,14 @@ func (ts *TopicStreamer) Run() {
 	dests := make([]common.Topic, 0)
 	mss := make([]common.MessageSerializer, 0)
 	for _, config := range ts.configs {
+		if config.Topic().Name == "" || config.Topic().Partition < 0 {
+			panic("Invalid topic")
+		}
+
+		if config.MessageSerializer() == nil {
+			panic("No message serializer")
+		}
+
 		dests = append(dests, config.Topic())
 		mss = append(mss, config.MessageSerializer())
 	}
@@ -89,14 +95,6 @@ func (ts *TopicStreamer) Run() {
 func (ts *TopicStreamer) run(dests []common.Topic, serializers []common.MessageSerializer) context.CancelFunc {
 	if dests == nil || len(dests) == 0 {
 		panic("No dests")
-	}
-
-	if serializers == nil || len(serializers) == 0 {
-		panic("No message serializers")
-	}
-
-	if len(serializers) != len(dests) {
-		panic("Number of message serializers must match number of dests")
 	}
 
 	for i, dest := range dests {

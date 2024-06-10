@@ -1,31 +1,202 @@
 package qstreamer_test
 
 import (
+	"github.com/IBM/sarama"
+	"github.com/stretchr/testify/assert"
 	qstreamer "github.com/violetpay-org/queue-streamer"
+	"github.com/violetpay-org/queue-streamer/common"
 	"testing"
-	"time"
 )
 
-func TestTopicStreamer(t *testing.T) {
-	brokers := []string{"b-3.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-2.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-1.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092"}
-	endTopic := qstreamer.Topic("te1", 3)
-	endTopic2 := qstreamer.Topic("te2", 3)
+var brokers = []string{"b-3.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-2.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-1.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092"}
+var topic = qstreamer.Topic("testtopic", 1)
 
-	serializer := qstreamer.NewPassThroughSerializer()
-	spec := qstreamer.NewStreamConfig(serializer, endTopic)
-	spcc2 := qstreamer.NewStreamConfig(serializer, endTopic2)
-	startTopic := qstreamer.Topic(
-		"test",
-		3,
-	)
+func TestTopicStreamer_NewTopicStreamer(t *testing.T) {
+	var streamer *qstreamer.TopicStreamer
 
-	topicStreamer := qstreamer.NewTopicStreamer(brokers, startTopic)
+	t.Cleanup(func() {
+		streamer = nil
+	})
 
-	topicStreamer.AddConfig(spec)
-	topicStreamer.AddConfig(spcc2)
+	t.Run("NewTopicStreamer without additional arguments", func(t *testing.T) {
+		t.Cleanup(func() {
+			streamer = nil
+		})
 
-	topicStreamer.Run()
-	defer topicStreamer.Stop()
-	time.Sleep(100 * time.Second)
-	topicStreamer.Stop()
+		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		assert.NotNil(t, streamer)
+	})
+
+	t.Run("NewTopicStreamer with additional arguments", func(t *testing.T) {
+		t.Run("Invalid number of arguments", func(t *testing.T) {
+			assert.Panics(t, func() {
+				qstreamer.NewTopicStreamer(brokers, topic, nil)
+			})
+
+			assert.Panics(t, func() {
+				qstreamer.NewTopicStreamer(brokers, topic, nil, nil, nil)
+			})
+		})
+
+		t.Run("Consumer config only", func(t *testing.T) {
+			t.Cleanup(func() {
+				streamer = nil
+			})
+
+			config := sarama.NewConfig()
+			streamer = qstreamer.NewTopicStreamer(brokers, topic, config, nil)
+			assert.NotNil(t, streamer)
+		})
+
+		t.Run("Producer config only", func(t *testing.T) {
+			t.Cleanup(func() {
+				streamer = nil
+			})
+
+			config := sarama.NewConfig()
+			streamer = qstreamer.NewTopicStreamer(brokers, topic, nil, config)
+			assert.NotNil(t, streamer)
+		})
+
+		t.Run("Consumer and Producer config", func(t *testing.T) {
+			t.Cleanup(func() {
+				streamer = nil
+			})
+
+			consumerConfig := sarama.NewConfig()
+			producerConfig := sarama.NewConfig()
+			streamer = qstreamer.NewTopicStreamer(brokers, topic, consumerConfig, producerConfig)
+			assert.NotNil(t, streamer)
+		})
+	})
+}
+
+func TestTopicStreamer_Getters(t *testing.T) {
+	streamer := qstreamer.NewTopicStreamer(brokers, topic)
+
+	t.Run("Topic", func(t *testing.T) {
+		assert.Equal(t, topic, streamer.Topic())
+	})
+
+	t.Run("Consumer", func(t *testing.T) {
+		assert.NotNil(t, streamer.Consumer())
+	})
+
+	t.Run("Configs", func(t *testing.T) {
+		assert.Equal(t, 0, len(streamer.Configs()))
+	})
+}
+
+func TestTopicStreamer_AddConfig(t *testing.T) {
+	streamer := qstreamer.NewTopicStreamer(brokers, topic)
+
+	t.Run("AddConfig", func(t *testing.T) {
+		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), topic)
+
+		streamer.AddConfig(config)
+		assert.Equal(t, 1, len(streamer.Configs()))
+		assert.Equal(t, config, streamer.Configs()[0])
+
+		streamer.AddConfig(config)
+		assert.Equal(t, 2, len(streamer.Configs()))
+
+		streamer.AddConfig(config)
+		assert.Equal(t, 3, len(streamer.Configs()))
+	})
+}
+
+func TestTopicStreamer_Run(t *testing.T) {
+	var streamer *qstreamer.TopicStreamer
+
+	t.Cleanup(func() {
+		streamer = nil
+	})
+
+	t.Run("Run", func(t *testing.T) {
+		t.Cleanup(func() {
+			streamer.Stop()
+			streamer = nil
+		})
+
+		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), topic)
+		streamer.AddConfig(config)
+
+		assert.NotPanics(t, func() {
+			streamer.Run()
+		})
+	})
+
+	t.Run("Run with no dests", func(t *testing.T) {
+		t.Cleanup(func() {
+			streamer = nil
+		})
+		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+
+		assert.Panics(t, func() {
+			streamer.Run()
+		})
+	})
+
+	t.Run("Run with no messageSerializer", func(t *testing.T) {
+		t.Cleanup(func() {
+			streamer = nil
+		})
+
+		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		config := qstreamer.NewStreamConfig(nil, topic)
+		streamer.AddConfig(config)
+
+		assert.Panics(t, func() {
+			streamer.Run()
+		})
+	})
+
+	t.Run("Run with no topic", func(t *testing.T) {
+		t.Cleanup(func() {
+			streamer = nil
+		})
+
+		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{})
+		streamer.AddConfig(config)
+
+		assert.Panics(t, func() {
+			streamer.Run()
+		})
+	})
+
+	t.Run("Run with no topic partition", func(t *testing.T) {
+		t.Cleanup(func() {
+			streamer = nil
+		})
+
+		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{Name: "testtopic"})
+		streamer.AddConfig(config)
+
+		assert.Panics(t, func() {
+			streamer.Run()
+		})
+	})
+
+	t.Run("Run with no topic name", func(t *testing.T) {
+		t.Cleanup(func() {
+			streamer = nil
+		})
+
+		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{Partition: 1})
+		streamer.AddConfig(config)
+
+		assert.Panics(t, func() {
+			streamer.Run()
+		})
+	})
+}
+
+func TestTopic(t *testing.T) {
+	topicc := qstreamer.Topic("testtopicName", 1)
+	assert.Equal(t, "testtopicName", topicc.Name)
+	assert.Equal(t, int32(1), topicc.Partition)
 }
