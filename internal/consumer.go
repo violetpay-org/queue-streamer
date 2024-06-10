@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/IBM/sarama"
-	"github.com/violetpay-org/queue-streamer/common"
 	"sync"
 	"time"
+
+	"github.com/IBM/sarama"
+	"github.com/violetpay-org/queue-streamer/common"
 )
 
 var transactionalId int32 = 0
