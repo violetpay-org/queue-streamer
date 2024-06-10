@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/IBM/sarama"
-	"github.com/violetpay-org/queue-streamer/shared"
+	"github.com/violetpay-org/queue-streamer/common"
 	"sync"
 	"time"
 )
@@ -18,9 +18,9 @@ var mutex = &sync.Mutex{}
 type StreamConsumer struct {
 	groupId      string
 	producerPool *ProducerPool
-	origin       shared.Topic
-	dests        []shared.Topic
-	mss          []shared.MessageSerializer
+	origin       common.Topic
+	dests        []common.Topic
+	mss          []common.MessageSerializer
 
 	// For kafka
 	brokers       []string
@@ -34,7 +34,7 @@ func (consumer *StreamConsumer) ProducerPool() *ProducerPool {
 }
 
 func NewStreamConsumer(
-	origin shared.Topic, groupId string,
+	origin common.Topic, groupId string,
 	brokers []string, config *sarama.Config, producerConfig *sarama.Config,
 ) *StreamConsumer {
 	if config == nil {
@@ -78,24 +78,24 @@ func NewStreamConsumer(
 		groupId:      groupId,
 		producerPool: NewProducerPool(brokers, producerConfigProvider),
 		origin:       origin,
-		dests:        make([]shared.Topic, 0),
-		mss:          make([]shared.MessageSerializer, 0),
+		dests:        make([]common.Topic, 0),
+		mss:          make([]common.MessageSerializer, 0),
 		brokers:      brokers,
 		config:       config,
 		groupMutex:   &sync.Mutex{},
 	}
 }
 
-func (consumer *StreamConsumer) AddDestination(dest shared.Topic, serializer shared.MessageSerializer) {
+func (consumer *StreamConsumer) AddDestination(dest common.Topic, serializer common.MessageSerializer) {
 	consumer.dests = append(consumer.dests, dest)
 	consumer.mss = append(consumer.mss, serializer)
 }
 
-func (consumer *StreamConsumer) Destinations() []shared.Topic {
+func (consumer *StreamConsumer) Destinations() []common.Topic {
 	return consumer.dests
 }
 
-func (consumer *StreamConsumer) MessageSerializers() []shared.MessageSerializer {
+func (consumer *StreamConsumer) MessageSerializers() []common.MessageSerializer {
 	return consumer.mss
 }
 
@@ -164,7 +164,7 @@ func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 				return nil
 			}
 
-			topic := shared.Topic{
+			topic := common.Topic{
 				Name:      msg.Topic,
 				Partition: msg.Partition,
 			}

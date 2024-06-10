@@ -5,15 +5,15 @@ import (
 	"errors"
 	"github.com/IBM/sarama"
 	"github.com/stretchr/testify/assert"
+	"github.com/violetpay-org/queue-streamer/common"
 	"github.com/violetpay-org/queue-streamer/internal"
-	"github.com/violetpay-org/queue-streamer/shared"
 	"testing"
 	"time"
 )
 
 var cbrokers = []string{"b-3.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-2.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092", "b-1.vpkafkacluster2.zy10lp.c3.kafka.ap-northeast-2.amazonaws.com:9092"}
 
-// TestSerializer is a mock implementation of shared.MessageSerializer
+// TestSerializer is a mock implementation of common.MessageSerializer
 type TestSerializer struct {
 }
 
@@ -22,7 +22,7 @@ func (ts *TestSerializer) MessageToProduceMessage(value string) string {
 }
 
 func TestStreamConsumer_AddDestination(t *testing.T) {
-	origin := shared.Topic{Name: "test", Partition: 3}
+	origin := common.Topic{Name: "test", Partition: 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
 	t.Run("AddDestination", func(t *testing.T) {
@@ -30,11 +30,11 @@ func TestStreamConsumer_AddDestination(t *testing.T) {
 			consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 		})
 
-		consumer.AddDestination(shared.Topic{Name: "test2", Partition: 3}, &TestSerializer{})
+		consumer.AddDestination(common.Topic{Name: "test2", Partition: 3}, &TestSerializer{})
 		assert.Equal(t, 1, len(consumer.Destinations()))
 		assert.Equal(t, 1, len(consumer.MessageSerializers()))
 
-		consumer.AddDestination(shared.Topic{Name: "test3", Partition: 3}, &TestSerializer{})
+		consumer.AddDestination(common.Topic{Name: "test3", Partition: 3}, &TestSerializer{})
 		assert.Equal(t, 2, len(consumer.Destinations()))
 		assert.Equal(t, 2, len(consumer.MessageSerializers()))
 
@@ -43,7 +43,7 @@ func TestStreamConsumer_AddDestination(t *testing.T) {
 }
 
 func TestStreamConsumer_Setup(t *testing.T) {
-	origin := shared.Topic{"test", 3}
+	origin := common.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 	sess := &internal.MockConsumerGroupSession{}
 
@@ -58,7 +58,7 @@ func TestStreamConsumer_Setup(t *testing.T) {
 }
 
 func TestStreamConsumer_Cleanup(t *testing.T) {
-	origin := shared.Topic{"test", 3}
+	origin := common.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 	sess := &internal.MockConsumerGroupSession{}
 
@@ -73,7 +73,7 @@ func TestStreamConsumer_Cleanup(t *testing.T) {
 }
 
 func TestStreamConsumer_ConsumeClaim(t *testing.T) {
-	origin := shared.Topic{Name: "test", Partition: 3}
+	origin := common.Topic{Name: "test", Partition: 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 	sess := &internal.MockConsumerGroupSession{}
 	msg := &internal.MockConsumerGroupClaim{}
@@ -156,7 +156,7 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 }
 
 func TestStreamConsumer_StartAsGroup(t *testing.T) {
-	origin := shared.Topic{"test", 3}
+	origin := common.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 	handler := &internal.MockConsumerGroupHandler{}
 
@@ -220,7 +220,7 @@ func TestStreamConsumer_StartAsGroup(t *testing.T) {
 }
 
 func TestStreamConsumer_StartAsGroupSelf(t *testing.T) {
-	origin := shared.Topic{"test", 3}
+	origin := common.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
 	t.Run("StartAsGroupSelf context canceled", func(t *testing.T) {
@@ -238,7 +238,7 @@ func TestStreamConsumer_StartAsGroupSelf(t *testing.T) {
 }
 
 func TestStreamConsumer_Transaction(t *testing.T) {
-	origin := shared.Topic{"test", 3}
+	origin := common.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
 	producer := &internal.MockAsyncProducer{}
@@ -280,7 +280,7 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 					assert.Equal(t, 0, len(consumer.Destinations()))
 				})
 
-				consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
+				consumer.AddDestination(common.Topic{"test2", 3}, &TestSerializer{})
 				assert.Equal(t, 1, len(consumer.Destinations()))
 
 				producer.InputChan = make(chan *sarama.ProducerMessage, 1)
@@ -312,8 +312,8 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 					assert.Equal(t, 0, len(consumer.Destinations()))
 				})
 
-				consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
-				consumer.AddDestination(shared.Topic{"test3", 3}, &TestSerializer{})
+				consumer.AddDestination(common.Topic{"test2", 3}, &TestSerializer{})
+				consumer.AddDestination(common.Topic{"test3", 3}, &TestSerializer{})
 				assert.Equal(t, 2, len(consumer.Destinations()))
 
 				producer.InputChan = make(chan *sarama.ProducerMessage, 2)
@@ -352,8 +352,8 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 					assert.Equal(t, 0, len(consumer.Destinations()))
 				})
 
-				consumer.AddDestination(shared.Topic{"test2", 3}, &TestSerializer{})
-				consumer.AddDestination(shared.Topic{"test3", 3}, &TestSerializer{})
+				consumer.AddDestination(common.Topic{"test2", 3}, &TestSerializer{})
+				consumer.AddDestination(common.Topic{"test3", 3}, &TestSerializer{})
 				assert.Equal(t, 2, len(consumer.Destinations()))
 
 				producer.InputChan = make(chan *sarama.ProducerMessage, 2)
@@ -654,7 +654,7 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 }
 
 func TestStreamConsumer_HandleTxnError(t *testing.T) {
-	origin := shared.Topic{"test", 3}
+	origin := common.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
 
 	producer := &internal.MockAsyncProducer{}

@@ -3,7 +3,7 @@ package internal
 import (
 	"fmt"
 	"github.com/IBM/sarama"
-	"github.com/violetpay-org/queue-streamer/shared"
+	"github.com/violetpay-org/queue-streamer/common"
 	"sync"
 )
 
@@ -11,7 +11,7 @@ import (
 // It is not related to Transaction, Transactional Producer implements by configProvider.
 type ProducerPool struct {
 	locker    sync.Mutex
-	producers map[shared.Topic][]sarama.AsyncProducer
+	producers map[common.Topic][]sarama.AsyncProducer
 
 	// For kafka
 	brokers        []string
@@ -19,7 +19,7 @@ type ProducerPool struct {
 }
 
 // Take returns a producer for a given topic. If the producer does not exist, it creates a new one.
-func (p *ProducerPool) Take(topic shared.Topic) (producer sarama.AsyncProducer) {
+func (p *ProducerPool) Take(topic common.Topic) (producer sarama.AsyncProducer) {
 	p.locker.Lock()
 	defer p.locker.Unlock()
 
@@ -35,7 +35,7 @@ func (p *ProducerPool) Take(topic shared.Topic) (producer sarama.AsyncProducer) 
 }
 
 // Return returns a producer to the pool.
-func (p *ProducerPool) Return(producer sarama.AsyncProducer, topic shared.Topic) {
+func (p *ProducerPool) Return(producer sarama.AsyncProducer, topic common.Topic) {
 	p.locker.Lock()
 	defer p.locker.Unlock()
 
@@ -53,7 +53,7 @@ func (p *ProducerPool) Return(producer sarama.AsyncProducer, topic shared.Topic)
 	p.producers[topic] = append(p.producers[topic], producer)
 }
 
-func (p *ProducerPool) Producers() map[shared.Topic][]sarama.AsyncProducer {
+func (p *ProducerPool) Producers() map[common.Topic][]sarama.AsyncProducer {
 	return p.producers
 }
 
@@ -75,7 +75,7 @@ func NewProducerPool(brokers []string, configProvider func() *sarama.Config) *Pr
 
 	pool := &ProducerPool{
 		locker:         sync.Mutex{},
-		producers:      make(map[shared.Topic][]sarama.AsyncProducer),
+		producers:      make(map[common.Topic][]sarama.AsyncProducer),
 		brokers:        brokers,
 		configProvider: configProvider,
 	}

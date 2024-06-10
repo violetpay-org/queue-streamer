@@ -3,8 +3,8 @@ package internal_test
 import (
 	"github.com/IBM/sarama"
 	"github.com/stretchr/testify/assert"
+	"github.com/violetpay-org/queue-streamer/common"
 	"github.com/violetpay-org/queue-streamer/internal"
-	"github.com/violetpay-org/queue-streamer/shared"
 	"testing"
 )
 
@@ -29,7 +29,7 @@ func TestProducerPool_Close(t *testing.T) {
 		return sarama.NewConfig()
 	})
 
-	topic := shared.Topic{Name: "test", Partition: 3}
+	topic := common.Topic{Name: "test", Partition: 3}
 
 	producer := pool.Take(topic)
 	assert.NotNil(t, &producer)
@@ -42,7 +42,7 @@ func TestProducerPool_Close(t *testing.T) {
 }
 
 func TestProducerPool_Take(t *testing.T) {
-	topic := shared.Topic{Name: "test", Partition: 3}
+	topic := common.Topic{Name: "test", Partition: 3}
 	pool := internal.NewProducerPool(pbrokers, func() *sarama.Config {
 		return sarama.NewConfig()
 	})
@@ -81,7 +81,7 @@ func TestProducerPool_Take(t *testing.T) {
 }
 
 func TestProducerPool_Return(t *testing.T) {
-	topic := shared.Topic{Name: "test", Partition: 3}
+	topic := common.Topic{Name: "test", Partition: 3}
 	pool := internal.NewProducerPool(pbrokers, func() *sarama.Config {
 		return sarama.NewConfig()
 	})

@@ -1,23 +1,23 @@
 package qstreamer
 
-import "github.com/violetpay-org/queue-streamer/shared"
+import "github.com/violetpay-org/queue-streamer/common"
 
 type StreamConfig struct {
-	ms    shared.MessageSerializer
-	topic shared.Topic
+	ms    common.MessageSerializer
+	topic common.Topic
 }
 
-func NewStreamConfig(ms shared.MessageSerializer, topic Topic) StreamConfig {
+func NewStreamConfig(ms common.MessageSerializer, topic common.Topic) StreamConfig {
 	return StreamConfig{
 		ms:    ms,
-		topic: convertTopic(topic),
+		topic: topic,
 	}
 }
 
-func (ss StreamConfig) MessageSerializer() shared.MessageSerializer {
+func (ss StreamConfig) MessageSerializer() common.MessageSerializer {
 	return ss.ms
 }
 
-func (ss StreamConfig) Topic() shared.Topic {
+func (ss StreamConfig) Topic() common.Topic {
 	return ss.topic
 }

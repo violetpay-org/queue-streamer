@@ -3,12 +3,12 @@ package qstreamer
 import (
 	"context"
 	"github.com/IBM/sarama"
+	"github.com/violetpay-org/queue-streamer/common"
 	"github.com/violetpay-org/queue-streamer/internal"
-	"github.com/violetpay-org/queue-streamer/shared"
 )
 
 type TopicStreamer struct {
-	topic   shared.Topic
+	topic   common.Topic
 	configs []StreamConfig
 	cancel  context.CancelFunc
 
@@ -21,7 +21,7 @@ type TopicStreamer struct {
 //   - ts := NewTopicStreamer(brokers, topic)
 //   - ts := NewTopicStreamer(brokers, topic, consumerConfig, producerConfig)
 //   - ts := NewTopicStreamer(brokers, topic, nil, producerConfig)
-func NewTopicStreamer(brokers []string, topic Topic, args ...interface{}) *TopicStreamer {
+func NewTopicStreamer(brokers []string, topic common.Topic, args ...interface{}) *TopicStreamer {
 	var ccfg *sarama.Config
 	var pcfg *sarama.Config
 
@@ -44,7 +44,7 @@ func NewTopicStreamer(brokers []string, topic Topic, args ...interface{}) *Topic
 	}
 
 	consumer := internal.NewStreamConsumer(
-		convertTopic(topic),
+		topic,
 		"groupId",
 		brokers,
 		ccfg,
@@ -52,14 +52,14 @@ func NewTopicStreamer(brokers []string, topic Topic, args ...interface{}) *Topic
 	)
 
 	return &TopicStreamer{
-		topic:    convertTopic(topic),
+		topic:    topic,
 		configs:  make([]StreamConfig, 0),
 		cancel:   nil,
 		consumer: consumer,
 	}
 }
 
-func (ts *TopicStreamer) Topic() shared.Topic {
+func (ts *TopicStreamer) Topic() common.Topic {
 	return ts.topic
 }
 
@@ -76,8 +76,8 @@ func (ts *TopicStreamer) AddConfig(config StreamConfig) {
 }
 
 func (ts *TopicStreamer) Run() {
-	dests := make([]shared.Topic, 0)
-	mss := make([]shared.MessageSerializer, 0)
+	dests := make([]common.Topic, 0)
+	mss := make([]common.MessageSerializer, 0)
 	for _, config := range ts.configs {
 		dests = append(dests, config.Topic())
 		mss = append(mss, config.MessageSerializer())
@@ -86,7 +86,7 @@ func (ts *TopicStreamer) Run() {
 	ts.cancel = ts.run(dests, mss)
 }
 
-func (ts *TopicStreamer) run(dests []shared.Topic, serializers []shared.MessageSerializer) context.CancelFunc {
+func (ts *TopicStreamer) run(dests []common.Topic, serializers []common.MessageSerializer) context.CancelFunc {
 	if dests == nil || len(dests) == 0 {
 		panic("No dests")
 	}
@@ -111,4 +111,8 @@ func (ts *TopicStreamer) run(dests []shared.Topic, serializers []shared.MessageS
 
 func (ts *TopicStreamer) Stop() {
 	ts.cancel()
+}
+
+func Topic(name string, partition int32) common.Topic {
+	return common.Topic{Name: name, Partition: partition}
 }
