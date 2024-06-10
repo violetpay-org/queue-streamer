@@ -1,11 +1,11 @@
-name: Generate code coverage badge
+name: Test and Generate coverage badge
 
-#on:
-#  pull_request:
-#    branches:
-#      - main
-
-on: [push]
+on:
+  pull_request:
+    branches:
+      - main
+#
+#on: [push]
 
 jobs:
   test:
