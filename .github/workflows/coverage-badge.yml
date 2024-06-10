@@ -1,9 +1,11 @@
 name: Generate code coverage badge
 
-on:
-  pull_request:
-    branches:
-      - main
+#on:
+#  pull_request:
+#    branches:
+#      - main
+
+on: [push]
 
 jobs:
   test:
@@ -15,6 +17,12 @@ jobs:
         with:
           persist-credentials: false # otherwise, the token used is the GITHUB_TOKEN, instead of your personal access token.
           fetch-depth: 0 # otherwise, there would be errors pushing refs to the destination repository.
+
+      - name: Run Kafka KRaft Broker
+        uses: spicyparrot/kafka-kraft-action@v1.1.0
+        with:
+          kafka-version: "3.7.0"
+          kafka-topics: "test,3,test1,3,test2,3,test3,3"
 
       - name: Setup go
         uses: actions/setup-go@v4
