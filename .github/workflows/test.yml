@@ -5,7 +5,7 @@ on: [push]
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: Update coverage badge
+    name: Test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
