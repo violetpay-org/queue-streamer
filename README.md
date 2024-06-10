@@ -1,4 +1,5 @@
 # Queue Streamer
+![Coverage](https://img.shields.io/badge/Coverage-91.6%25-brightgreen)
 
 Queue Streamer is a Go package that processes and transfers data between Kafka topics with exactly-once delivery guarantees. This package receives messages from Kafka brokers and transfers them to specified topics. This document explains how to install and use Queue Streamer.
 
