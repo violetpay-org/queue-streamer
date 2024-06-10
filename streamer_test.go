@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-var brokers = []string{"localhost:9092"}
+var brokers = []string{"localhost:9093"}
 var topic = qstreamer.Topic("test", 1)
 
 func TestTopicStreamer_NewTopicStreamer(t *testing.T) {
