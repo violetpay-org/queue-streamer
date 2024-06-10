@@ -77,7 +77,7 @@ func (ts *TopicStreamer) Run() {
 	dests := make([]common.Topic, 0)
 	mss := make([]common.MessageSerializer, 0)
 	for _, config := range ts.configs {
-		if config.Topic().Name == "" || config.Topic().Partition < 0 {
+		if config.Topic().Name == "" || config.Topic().Partition <= 0 {
 			panic("Invalid topic")
 		}
 
