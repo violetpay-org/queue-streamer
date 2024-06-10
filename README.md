@@ -28,23 +28,20 @@ import (
 func main() {
 	wg := &sync.WaitGroup{}
 	
-	brokers := []string{"localhost:9092", "localhost:9093", "localhost:9094"}
-	origin := qstreamer.NewTopic("origin-topic", 3)           // Topic name and partition
+	brokers := []string{"localhost:9092"}
+	origin := qstreamer.Topic("origin-topic", 3)           // Topic name and partition
 
 	// Serializer that converts the message to the message to be produced.
 	// In this case, the message is not converted, so it is a pass-through serializer.
 	serializer := qstreamer.NewPassThroughSerializer()
 	
-	destination1 := qstreamer.NewTopic("destination-topic-1", 5) // Topic name and partition
-	destination2 := qstreamer.NewTopic("destination-topic-2", 3)
+	destination1 := qstreamer.Topic("destination-topic-1", 5) // Topic name and partition
 	
 	streamer := qstreamer.NewTopicStreamer(brokers, origin)
 
 	cfg := qstreamer.NewStreamConfig(serializer, destination1)
 	streamer.AddConfig(cfg)
 
-	cfg = qstreamer.NewStreamConfig(serializer, destination2)
-	streamer.AddConfig(cfg)
 	
 	streamer.Run() // Non-blocking
 	defer streamer.Stop()
