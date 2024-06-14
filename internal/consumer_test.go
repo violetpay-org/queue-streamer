@@ -237,6 +237,13 @@ func TestStreamConsumer_StartAsGroupSelf(t *testing.T) {
 	})
 }
 
+type TestSerializerWithConverting struct {
+}
+
+func (ts *TestSerializerWithConverting) MessageToProduceMessage(value string) string {
+	return value + "-converted"
+}
+
 func TestStreamConsumer_Transaction(t *testing.T) {
 	origin := common.Topic{"test", 3}
 	consumer := internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
@@ -369,6 +376,34 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 
 				assert.Equal(t, 0, session.ResetOffsetCalled)
 				assert.Equal(t, 0, producer.AbortTxnCalled)
+			})
+
+			t.Run("Serializing test", func(t *testing.T) {
+				t.Cleanup(func() {
+					producer = &internal.MockAsyncProducer{}
+					session = &internal.MockConsumerGroupSession{}
+					consumer = internal.NewStreamConsumer(origin, "groupId", cbrokers, nil, nil)
+					assert.Equal(t, 0, len(consumer.Destinations()))
+				})
+
+				consumer.AddDestination(common.Topic{"test2", 3}, &TestSerializerWithConverting{})
+				assert.Equal(t, 1, len(consumer.Destinations()))
+
+				producer.InputChan = make(chan *sarama.ProducerMessage, 1)
+				assert.NotPanics(t, func() {
+					go func() {
+						time.Sleep(1 * time.Second)
+						consumer.Transaction(producer, msg, session)
+					}()
+				})
+
+				claimed := <-producer.InputChan
+				value, err := claimed.Value.Encode()
+				assert.Nil(t, err)
+
+				assert.Equal(t, "test2", claimed.Topic)
+				assert.NotEqual(t, msg.Value, string(value))
+				assert.Equal(t, consumerMsgValue+"-converted", string(value))
 			})
 		})
 	})
