@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/IBM/sarama"
-	"github.com/violetpay-org/queue-streamer/common"
 	"sync"
 	"time"
+
+	"github.com/IBM/sarama"
+	"github.com/violetpay-org/queue-streamer/common"
 )
 
 var transactionalId int32 = 0
@@ -234,7 +235,9 @@ func (consumer *StreamConsumer) HandleTxnError(producer sarama.AsyncProducer, me
 
 func (consumer *StreamConsumer) handleTxnError(producer sarama.AsyncProducer, message *sarama.ConsumerMessage, session sarama.ConsumerGroupSession, err error, defaulthandler func() error) {
 	fmt.Printf("Message consumer: unable to process transaction: %+v", err)
-	for {
+	retryCount := 0
+	maxRetries := 30
+	for retryCount < maxRetries {
 		if producer.TxnStatus()&sarama.ProducerTxnFlagFatalError != 0 {
 			// fatal error. need to recreate producer.
 			fmt.Println("Message consumer: producer is in a fatal state, need to recreate it")
@@ -257,5 +260,8 @@ func (consumer *StreamConsumer) handleTxnError(producer sarama.AsyncProducer, me
 		if err == nil {
 			return
 		}
+	}
+	if retryCount == maxRetries {
+		fmt.Println("Error: failed to commit transaction after", maxRetries, "retries")
 	}
 }
