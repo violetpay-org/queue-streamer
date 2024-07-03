@@ -29,41 +29,46 @@ import (
 func main() {
 	wg := &sync.WaitGroup{}
 	
-	brokers := []string{"localhost:9092"}
-	origin := qstreamer.Topic("origin-topic", 3)           // Topic name and partition
-
-	// Serializer that converts the message to the message to be produced.
+	brokers := []string{"localhost:9092"} 
+	
+	// Topic name and partition
+	origin := qstreamer.Topic("origin-topic", 3)
+	
+	// Create a topic streamer from the brokers and the origin topic.
+	streamer := qstreamer.NewTopicStreamer(brokers, origin)
+	
+	// Serializer that converts the message to the message to be produced. 
 	// In this case, the message is not converted, so it is a pass-through serializer.
 	serializer := qstreamer.NewPassThroughSerializer()
 	
-	destination1 := qstreamer.Topic("destination-topic-1", 5) // Topic name and partition
+	// Destination topic and partition
+	destination1 := qstreamer.Topic("destination-topic-1", 5)
 	
-	streamer := qstreamer.NewTopicStreamer(brokers, origin)
-
 	cfg := qstreamer.NewStreamConfig(serializer, destination1)
 	streamer.AddConfig(cfg)
 
 	
-	streamer.Run() // Non-blocking
+	go streamer.Run()
 	defer streamer.Stop()
 	wg.Add(1)
-
+	
 	wg.Wait()
 }
 ```
 
 ### Explanation
 
-1. **Set Topics**: Use the `NewTopic()` to set the start and end topics.
+1. **Set Topics**: Use the `Topic()` to set the start and end topics.
 
-2. **Use PassThroughSerializer**: Create a pass-through serializer using `NewPassThroughSerializer()` which does not manufacture the message.
-   * If you want to convert the message, you can create a custom serializer that implements the Serializer interface.
+2. **Create Streamer**: Create a new streamer with the `NewTopicStreamer()` function. This function takes the Kafka brokers and the origin topic as arguments.
 
-3. **Set StreamConfig**: Use the `NewStreamConfig()` to configure the stream settings.
+3. **Set Serializer**: Create a new serializer with the `NewPassThroughSerializer()` function. This function is used to convert the message to the message to be produced. In this case, the message is not converted, so it is a pass-through serializer.
 
-4. **Create and Configure TopicStreamer**: Use the `NewTopicStreamer()` to create the topic streamer and the `AddConfig()` method to add the stream configuration.
+4. **Set Destination Topic**: Use the `Topic()` to set the destination topic and partition.
 
-5. **Run and Stop Streamer**: Call the `Run()` method to start the streamer and the `Stop()` method to stop the streamer.
+5. **Set Configuration**: Create a new configuration with the `NewStreamConfig()` function. This function takes the serializer and the destination topic as arguments. Add the configuration to the streamer with the `AddConfig()` function.
+
+6. **Run Streamer**: Run the streamer with the `Run()` function. This function starts the streamer and processes the messages.
 
 ## Contribution
 
