@@ -6,12 +6,14 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/violetpay-org/queue-streamer/common"
 	"github.com/violetpay-org/queue-streamer/internal"
+	"sync"
 )
 
 type TopicStreamer struct {
 	topic   common.Topic
 	configs []StreamConfig
 	cancel  context.CancelFunc
+	mutex   *sync.Mutex
 
 	consumer *internal.StreamConsumer
 }
@@ -55,6 +57,7 @@ func NewTopicStreamer(brokers []string, topic common.Topic, args ...interface{})
 		configs:  make([]StreamConfig, 0),
 		cancel:   nil,
 		consumer: consumer,
+		mutex:    &sync.Mutex{},
 	}
 }
 
@@ -103,11 +106,15 @@ func (ts *TopicStreamer) run(dests []common.Topic, serializers []common.MessageS
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	ts.mutex.Lock()
 	ts.cancel = cancel
+	ts.mutex.Unlock()
 	ts.consumer.StartAsGroupSelf(ctx)
 }
 
 func (ts *TopicStreamer) Stop() error {
+	ts.mutex.Lock()
+	defer ts.mutex.Unlock()
 	if ts.cancel == nil {
 		return errors.New("no cancel function")
 	}
