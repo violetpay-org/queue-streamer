@@ -2,6 +2,7 @@ package qstreamer
 
 import (
 	"context"
+	"errors"
 	"github.com/IBM/sarama"
 	"github.com/violetpay-org/queue-streamer/common"
 	"github.com/violetpay-org/queue-streamer/internal"
@@ -106,8 +107,13 @@ func (ts *TopicStreamer) run(dests []common.Topic, serializers []common.MessageS
 	ts.consumer.StartAsGroupSelf(ctx)
 }
 
-func (ts *TopicStreamer) Stop() {
+func (ts *TopicStreamer) Stop() error {
+	if ts.cancel == nil {
+		return errors.New("no cancel function")
+	}
+
 	ts.cancel()
+	return nil
 }
 
 func Topic(name string, partition int32) common.Topic {
