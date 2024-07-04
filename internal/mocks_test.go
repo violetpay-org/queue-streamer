@@ -330,9 +330,11 @@ func TestMockAsyncProducer_TxnStatus(t *testing.T) {
 		assert.Zero(t, producer.TxnStatus())
 
 		producer.TxnStatusFlag = sarama.ProducerTxnFlagInError
+		assert.NotZero(t, producer.TxnStatus())
 		assert.Equal(t, sarama.ProducerTxnFlagInError, producer.TxnStatus())
 
 		producer.TxnStatusFlag = sarama.ProducerTxnFlagAbortableError
+		assert.NotZero(t, producer.TxnStatus())
 		assert.Equal(t, sarama.ProducerTxnFlagAbortableError, producer.TxnStatus())
 	})
 }

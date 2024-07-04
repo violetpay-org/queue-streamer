@@ -1,5 +1,5 @@
 # Queue Streamer
-![Coverage](https://img.shields.io/badge/Coverage-91.8%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-100.0%25-brightgreen)
 [![Test](https://github.com/violetpay-org/queue-streamer/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/violetpay-org/queue-streamer/actions/workflows/test.yml)
 [![CodeQL](https://github.com/violetpay-org/queue-streamer/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/violetpay-org/queue-streamer/actions/workflows/github-code-scanning/codeql)
 
