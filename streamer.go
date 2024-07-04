@@ -2,6 +2,7 @@ package qstreamer
 
 import (
 	"context"
+	"errors"
 	"github.com/IBM/sarama"
 	"github.com/violetpay-org/queue-streamer/common"
 	"github.com/violetpay-org/queue-streamer/internal"
@@ -89,10 +90,10 @@ func (ts *TopicStreamer) Run() {
 		mss = append(mss, config.MessageSerializer())
 	}
 
-	ts.cancel = ts.run(dests, mss)
+	ts.run(dests, mss)
 }
 
-func (ts *TopicStreamer) run(dests []common.Topic, serializers []common.MessageSerializer) context.CancelFunc {
+func (ts *TopicStreamer) run(dests []common.Topic, serializers []common.MessageSerializer) {
 	if dests == nil || len(dests) == 0 {
 		panic("No dests")
 	}
@@ -102,13 +103,17 @@ func (ts *TopicStreamer) run(dests []common.Topic, serializers []common.MessageS
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go ts.consumer.StartAsGroupSelf(ctx)
-
-	return cancel
+	ts.cancel = cancel
+	ts.consumer.StartAsGroupSelf(ctx)
 }
 
-func (ts *TopicStreamer) Stop() {
+func (ts *TopicStreamer) Stop() error {
+	if ts.cancel == nil {
+		return errors.New("no cancel function")
+	}
+
 	ts.cancel()
+	return nil
 }
 
 func Topic(name string, partition int32) common.Topic {
