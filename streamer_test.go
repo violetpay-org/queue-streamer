@@ -6,6 +6,7 @@ import (
 	qstreamer "github.com/violetpay-org/queue-streamer"
 	"github.com/violetpay-org/queue-streamer/common"
 	"testing"
+	"time"
 )
 
 var brokers = []string{"localhost:9093"}
@@ -114,7 +115,8 @@ func TestTopicStreamer_Run(t *testing.T) {
 
 	t.Run("Run", func(t *testing.T) {
 		t.Cleanup(func() {
-			streamer.Stop()
+			err := streamer.Stop()
+			assert.Nil(t, err)
 			streamer = nil
 		})
 
@@ -123,23 +125,26 @@ func TestTopicStreamer_Run(t *testing.T) {
 		streamer.AddConfig(config)
 
 		assert.NotPanics(t, func() {
-			streamer.Run()
+			go streamer.Run()
+			time.Sleep(1 * time.Second)
 		})
 	})
 
 	t.Run("Run with no dests", func(t *testing.T) {
 		t.Cleanup(func() {
+			err := streamer.Stop()
+			assert.NotNil(t, err)
 			streamer = nil
 		})
 		streamer = qstreamer.NewTopicStreamer(brokers, topic)
 
-		assert.Panics(t, func() {
-			streamer.Run()
-		})
+		assert.Panics(t, streamer.Run)
 	})
 
 	t.Run("Run with no messageSerializer", func(t *testing.T) {
 		t.Cleanup(func() {
+			err := streamer.Stop()
+			assert.NotNil(t, err)
 			streamer = nil
 		})
 
@@ -147,13 +152,13 @@ func TestTopicStreamer_Run(t *testing.T) {
 		config := qstreamer.NewStreamConfig(nil, topic)
 		streamer.AddConfig(config)
 
-		assert.Panics(t, func() {
-			streamer.Run()
-		})
+		assert.Panics(t, streamer.Run)
 	})
 
 	t.Run("Run with no topic", func(t *testing.T) {
 		t.Cleanup(func() {
+			err := streamer.Stop()
+			assert.NotNil(t, err)
 			streamer = nil
 		})
 
@@ -161,13 +166,13 @@ func TestTopicStreamer_Run(t *testing.T) {
 		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{})
 		streamer.AddConfig(config)
 
-		assert.Panics(t, func() {
-			streamer.Run()
-		})
+		assert.Panics(t, streamer.Run)
 	})
 
 	t.Run("Run with no topic partition", func(t *testing.T) {
 		t.Cleanup(func() {
+			err := streamer.Stop()
+			assert.NotNil(t, err)
 			streamer = nil
 		})
 
@@ -175,13 +180,13 @@ func TestTopicStreamer_Run(t *testing.T) {
 		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{Name: "test1"})
 		streamer.AddConfig(config)
 
-		assert.Panics(t, func() {
-			streamer.Run()
-		})
+		assert.Panics(t, streamer.Run)
 	})
 
 	t.Run("Run with no topic name", func(t *testing.T) {
 		t.Cleanup(func() {
+			err := streamer.Stop()
+			assert.NotNil(t, err)
 			streamer = nil
 		})
 
@@ -189,9 +194,7 @@ func TestTopicStreamer_Run(t *testing.T) {
 		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{Partition: 1})
 		streamer.AddConfig(config)
 
-		assert.Panics(t, func() {
-			streamer.Run()
-		})
+		assert.Panics(t, streamer.Run)
 	})
 }
 
