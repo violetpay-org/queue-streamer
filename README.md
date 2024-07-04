@@ -1,5 +1,8 @@
 # Queue Streamer
 ![Coverage](https://img.shields.io/badge/Coverage-91.8%25-brightgreen)
+[![Test](https://github.com/violetpay-org/queue-streamer/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/violetpay-org/queue-streamer/actions/workflows/test.yml)
+[![CodeQL](https://github.com/violetpay-org/queue-streamer/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/violetpay-org/queue-streamer/actions/workflows/github-code-scanning/codeql)
+
 
 Queue Streamer is a Go package that processes and transfers data between Kafka topics with exactly-once delivery guarantees. This package receives messages from Kafka brokers and transfers them to specified topics. This document explains how to install and use Queue Streamer.
 
