@@ -23,12 +23,20 @@ func NewDirectStreamer(brokers []string, src common.Topic, groupId string, args 
 	}
 }
 
-func (ds *DirectStreamer) Config() StreamConfig {
-	return ds.ts.configs[0]
+func (ds *DirectStreamer) Config() (bool, StreamConfig) {
+	if len(ds.ts.configs) == 0 {
+		return false, StreamConfig{}
+	}
+
+	return true, ds.ts.configs[0]
 }
 
 func (ds *DirectStreamer) SetConfig(config StreamConfig) {
-	ds.ts.configs[0] = config
+	if len(ds.ts.configs) == 0 {
+		ds.ts.configs = append(ds.ts.configs, config)
+	} else {
+		ds.ts.configs[0] = config
+	}
 }
 
 func (ds *DirectStreamer) Topic() common.Topic {
