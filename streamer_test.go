@@ -9,7 +9,8 @@ import (
 	"time"
 )
 
-var brokers = []string{"localhost:9093"}
+var brokers = []string{"kafka.vp-datacenter-1.violetpay.net:9092", "kafka.vp-datacenter-1.violetpay.net:9093", "kafka.vp-datacenter-1.violetpay.net:9094"}
+
 var topic = qstreamer.Topic("test", 1)
 
 func TestTopicStreamer_NewTopicStreamer(t *testing.T) {
@@ -24,18 +25,18 @@ func TestTopicStreamer_NewTopicStreamer(t *testing.T) {
 			streamer = nil
 		})
 
-		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		streamer = qstreamer.NewTopicStreamer(brokers, topic, "")
 		assert.NotNil(t, streamer)
 	})
 
 	t.Run("NewTopicStreamer with additional arguments", func(t *testing.T) {
 		t.Run("Invalid number of arguments", func(t *testing.T) {
 			assert.Panics(t, func() {
-				qstreamer.NewTopicStreamer(brokers, topic, nil)
+				qstreamer.NewTopicStreamer(brokers, topic, "", nil)
 			})
 
 			assert.Panics(t, func() {
-				qstreamer.NewTopicStreamer(brokers, topic, nil, nil, nil)
+				qstreamer.NewTopicStreamer(brokers, topic, "", nil, nil, nil)
 			})
 		})
 
@@ -45,7 +46,7 @@ func TestTopicStreamer_NewTopicStreamer(t *testing.T) {
 			})
 
 			config := sarama.NewConfig()
-			streamer = qstreamer.NewTopicStreamer(brokers, topic, config, nil)
+			streamer = qstreamer.NewTopicStreamer(brokers, topic, "", config, nil)
 			assert.NotNil(t, streamer)
 		})
 
@@ -55,7 +56,7 @@ func TestTopicStreamer_NewTopicStreamer(t *testing.T) {
 			})
 
 			config := sarama.NewConfig()
-			streamer = qstreamer.NewTopicStreamer(brokers, topic, nil, config)
+			streamer = qstreamer.NewTopicStreamer(brokers, topic, "", nil, config)
 			assert.NotNil(t, streamer)
 		})
 
@@ -66,14 +67,14 @@ func TestTopicStreamer_NewTopicStreamer(t *testing.T) {
 
 			consumerConfig := sarama.NewConfig()
 			producerConfig := sarama.NewConfig()
-			streamer = qstreamer.NewTopicStreamer(brokers, topic, consumerConfig, producerConfig)
+			streamer = qstreamer.NewTopicStreamer(brokers, topic, "", consumerConfig, producerConfig)
 			assert.NotNil(t, streamer)
 		})
 	})
 }
 
 func TestTopicStreamer_Getters(t *testing.T) {
-	streamer := qstreamer.NewTopicStreamer(brokers, topic)
+	streamer := qstreamer.NewTopicStreamer(brokers, topic, "")
 
 	t.Run("Topic", func(t *testing.T) {
 		assert.Equal(t, topic, streamer.Topic())
@@ -89,7 +90,7 @@ func TestTopicStreamer_Getters(t *testing.T) {
 }
 
 func TestTopicStreamer_AddConfig(t *testing.T) {
-	streamer := qstreamer.NewTopicStreamer(brokers, topic)
+	streamer := qstreamer.NewTopicStreamer(brokers, topic, "")
 
 	t.Run("AddConfig", func(t *testing.T) {
 		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), topic)
@@ -120,7 +121,7 @@ func TestTopicStreamer_Run(t *testing.T) {
 			streamer = nil
 		})
 
-		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		streamer = qstreamer.NewTopicStreamer(brokers, topic, "")
 		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), topic)
 		streamer.AddConfig(config)
 
@@ -136,7 +137,7 @@ func TestTopicStreamer_Run(t *testing.T) {
 			assert.NotNil(t, err)
 			streamer = nil
 		})
-		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		streamer = qstreamer.NewTopicStreamer(brokers, topic, "")
 
 		assert.Panics(t, streamer.Run)
 	})
@@ -148,7 +149,7 @@ func TestTopicStreamer_Run(t *testing.T) {
 			streamer = nil
 		})
 
-		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		streamer = qstreamer.NewTopicStreamer(brokers, topic, "")
 		config := qstreamer.NewStreamConfig(nil, topic)
 		streamer.AddConfig(config)
 
@@ -162,7 +163,7 @@ func TestTopicStreamer_Run(t *testing.T) {
 			streamer = nil
 		})
 
-		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		streamer = qstreamer.NewTopicStreamer(brokers, topic, "")
 		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{})
 		streamer.AddConfig(config)
 
@@ -176,7 +177,7 @@ func TestTopicStreamer_Run(t *testing.T) {
 			streamer = nil
 		})
 
-		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		streamer = qstreamer.NewTopicStreamer(brokers, topic, "")
 		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{Name: "test1"})
 		streamer.AddConfig(config)
 
@@ -190,7 +191,7 @@ func TestTopicStreamer_Run(t *testing.T) {
 			streamer = nil
 		})
 
-		streamer = qstreamer.NewTopicStreamer(brokers, topic)
+		streamer = qstreamer.NewTopicStreamer(brokers, topic, "")
 		config := qstreamer.NewStreamConfig(qstreamer.NewPassThroughSerializer(), common.Topic{Partition: 1})
 		streamer.AddConfig(config)
 

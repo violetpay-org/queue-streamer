@@ -9,22 +9,24 @@ import (
 	"sync"
 )
 
+// TopicStreamer is a streamer that streams messages from a topic to other topics.
 type TopicStreamer struct {
 	topic   common.Topic
 	configs []StreamConfig
 	cancel  context.CancelFunc
 	mutex   *sync.Mutex
+	groupId string
 
 	consumer *internal.StreamConsumer
 }
 
 // NewTopicStreamer creates a new topic streamer that streams messages from a topic to other topics.
-// The streamer is configured with a list of brokers and a topic to stream from.
+// The streamer is configured with a list of brokers, a topic to stream from and a consumer group id .
 // If you want to override the default configuration of the sarama consumer and producer, you can pass additional arguments.
-//   - ts := NewTopicStreamer(brokers, topic)
-//   - ts := NewTopicStreamer(brokers, topic, consumerConfig, producerConfig)
-//   - ts := NewTopicStreamer(brokers, topic, nil, producerConfig)
-func NewTopicStreamer(brokers []string, topic common.Topic, args ...interface{}) *TopicStreamer {
+//   - ts := NewTopicStreamer(brokers, topic, groupId)
+//   - ts := NewTopicStreamer(brokers, topic, groupId, consumerConfig, producerConfig)
+//   - ts := NewTopicStreamer(brokers, topic, groupId, nil, producerConfig)
+func NewTopicStreamer(brokers []string, topic common.Topic, groupId string, args ...interface{}) *TopicStreamer {
 	var ccfg *sarama.Config
 	var pcfg *sarama.Config
 
@@ -44,9 +46,13 @@ func NewTopicStreamer(brokers []string, topic common.Topic, args ...interface{})
 		panic("Invalid number of arguments")
 	}
 
+	if groupId == "" {
+		groupId = "queue-streamer-default-group"
+	}
+
 	consumer := internal.NewStreamConsumer(
 		topic,
-		"groupId",
+		groupId,
 		brokers,
 		ccfg,
 		pcfg,
@@ -58,6 +64,7 @@ func NewTopicStreamer(brokers []string, topic common.Topic, args ...interface{})
 		cancel:   nil,
 		consumer: consumer,
 		mutex:    &sync.Mutex{},
+		groupId:  groupId,
 	}
 }
 
@@ -75,6 +82,10 @@ func (ts *TopicStreamer) Configs() []StreamConfig {
 
 func (ts *TopicStreamer) AddConfig(config StreamConfig) {
 	ts.configs = append(ts.configs, config)
+}
+
+func (ts *TopicStreamer) GroupId() string {
+	return ts.groupId
 }
 
 func (ts *TopicStreamer) Run() {
