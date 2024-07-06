@@ -7,8 +7,6 @@ import (
 )
 
 func TestCopy(t *testing.T) {
-	t.Parallel()
-
 	t.Run("Copy pointer", func(t *testing.T) {
 		type TestStruct struct {
 			Name string
