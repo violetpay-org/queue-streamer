@@ -15,8 +15,8 @@ func Copy(source interface{}, destin interface{}) {
 		y := reflect.New(starX.Type())
 		starY := y.Elem()
 		starY.Set(starX)
-		reflect.ValueOf(destin).Elem().Set(y.Elem())
+		dest.Elem().Set(y.Elem())
 	} else {
-		reflect.ValueOf(destin).Elem().Set(x)
+		dest.Elem().Set(x)
 	}
 }

@@ -3,12 +3,13 @@ package internal_test
 import (
 	"context"
 	"errors"
+	"testing"
+	"time"
+
 	"github.com/IBM/sarama"
 	"github.com/stretchr/testify/assert"
 	"github.com/violetpay-org/queue-streamer/common"
 	"github.com/violetpay-org/queue-streamer/internal"
-	"testing"
-	"time"
 )
 
 var cbrokers = []string{"localhost:9093"}
@@ -136,6 +137,7 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 		msg.DataChan = make(chan *sarama.ConsumerMessage, 1)
 
 		go func() {
+			defer close(msg.DataChan)
 			time.Sleep(1 * time.Second)
 			msg.DataChan <- &sarama.ConsumerMessage{
 				Topic:     "test",
@@ -145,7 +147,6 @@ func TestStreamConsumer_ConsumeClaim(t *testing.T) {
 				Offset:    0,
 			}
 			time.Sleep(1 * time.Second)
-			close(msg.DataChan)
 		}()
 
 		assert.Equal(t, 0, len(consumer.ProducerPool().Producers()))
