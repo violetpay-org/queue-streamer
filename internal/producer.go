@@ -9,6 +9,8 @@ import (
 
 // ProducerPool is a pool of producers that can be used to produce messages to Kafka for one set of brokers.
 // It is not related to Transaction, Transactional Producer implements by configProvider.
+//
+// Will be overridden Returns.Errors to true, because of monitoring errors.
 type ProducerPool struct {
 	locker    sync.Mutex
 	producers map[common.Topic][]sarama.AsyncProducer
@@ -84,11 +86,45 @@ func NewProducerPool(brokers []string, configProvider func() *sarama.Config) *Pr
 }
 
 func (p *ProducerPool) generateProducer() sarama.AsyncProducer {
-	producer, err := sarama.NewAsyncProducer(p.brokers, p.configProvider())
+	cfg := p.configProvider()
+	cfg.Producer.Return.Errors = true
+
+	producer, err := sarama.NewAsyncProducer(p.brokers, cfg)
 	if err != nil {
 		fmt.Println("Error creating producer", err)
 		return nil
 	}
 
+	go p.monitorErrors(producer)
+
 	return producer
+}
+
+func (p *ProducerPool) monitorErrors(producer sarama.AsyncProducer) {
+	for err := range producer.Errors() {
+		fmt.Println("ERROR! Failed to produce message:", err.Err)
+		if err.Err == sarama.ErrShuttingDown {
+			if err.Msg == nil {
+				// 프로듀서가 꺼졌는데 메시지가 남아있지 않은 경우에만 break 합니다.
+				// 메세지가 남아있는 경우 재발행해야 되기 때문에 break 하면 안됩니다.
+				break
+			}
+		}
+
+		// 재발행.
+		msg := err.Msg
+		p.republishMessage(msg)
+	}
+}
+
+// republishMessage republishes a message that failed to be produced.
+func (p *ProducerPool) republishMessage(msg *sarama.ProducerMessage) {
+	// Republish message
+	producer := p.Take(common.Topic{Name: msg.Topic, Partition: msg.Partition})
+	if producer != nil {
+		producer.Input() <- msg
+		p.Return(producer, common.Topic{Name: msg.Topic, Partition: msg.Partition})
+	} else {
+		p.republishMessage(msg)
+	}
 }
