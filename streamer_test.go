@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var brokers = []string{"kafka.vp-datacenter-1.violetpay.net:9092", "kafka.vp-datacenter-1.violetpay.net:9093", "kafka.vp-datacenter-1.violetpay.net:9094"}
+var brokers = []string{"localhost:9093"}
 
 var topic = qstreamer.Topic("test", 1)
 
