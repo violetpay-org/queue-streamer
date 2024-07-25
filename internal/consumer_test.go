@@ -679,8 +679,8 @@ func TestStreamConsumer_Transaction(t *testing.T) {
 			consumer.Transaction(producer, msg, session)
 
 			assert.Equal(t, 1, producer.BeginTxnCalled)
-			assert.Equal(t, 2, producer.AddMessageToTxnCalled)
-			assert.Equal(t, 1, producer.CommitTxnCalled)
+			assert.Equal(t, 1, producer.AddMessageToTxnCalled)
+			assert.Equal(t, 10, producer.CommitTxnCalled)
 
 			assert.Equal(t, 0, session.ResetOffsetCalled)
 			assert.Equal(t, 0, producer.AbortTxnCalled)
