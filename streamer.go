@@ -131,6 +131,9 @@ func (ts *TopicStreamer) Stop() error {
 	}
 
 	ts.cancel()
+
+	ts.Consumer().ProducerPool().Close()
+	ts.Consumer().CloseGroup()
 	return nil
 }
 
