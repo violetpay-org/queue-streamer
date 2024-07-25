@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-var cbrokers = []string{"localhost:9093"}
+var cbrokers = []string{"kafka.vp-datacenter-1.violetpay.net:9092", "kafka.vp-datacenter-1.violetpay.net:9093", "kafka.vp-datacenter-1.violetpay.net:9094"}
 
 // TestSerializer is a mock implementation of common.MessageSerializer
 type TestSerializer struct {

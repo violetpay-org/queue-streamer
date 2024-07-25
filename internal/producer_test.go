@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-var pbrokers = []string{"localhost:9093"}
+var pbrokers = []string{"kafka.vp-datacenter-1.violetpay.net:9092", "kafka.vp-datacenter-1.violetpay.net:9093", "kafka.vp-datacenter-1.violetpay.net:9094"}
 
 func TestNewProducerPool(t *testing.T) {
 	t.Run("NewProducerPool no configProvider", func(t *testing.T) {

@@ -219,7 +219,7 @@ func (consumer *StreamConsumer) Transaction(producer sarama.AsyncProducer, messa
 	if err != nil {
 		fmt.Println("Error committing transaction:", err)
 		consumer.handleTxnError(producer, message, session, err, func() error {
-			return producer.AddMessageToTxn(message, consumer.groupId, nil)
+			return producer.CommitTxn()
 		})
 		return
 	}
