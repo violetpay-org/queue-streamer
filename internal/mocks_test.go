@@ -300,8 +300,10 @@ func TestMockAsyncProducer_Errors(t *testing.T) {
 			producer = nil
 		})
 
-		producer = &internal.MockAsyncProducer{}
-		assert.Nil(t, producer.Errors())
+		producer = &internal.MockAsyncProducer{
+			ErrorsChan: make(chan *sarama.ProducerError),
+		}
+		assert.NotNil(t, producer.Errors())
 	})
 }
 

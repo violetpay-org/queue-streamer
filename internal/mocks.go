@@ -82,6 +82,7 @@ type MockAsyncProducer struct {
 	AddMessageToTxnError  error
 	CloseCalled           int
 	InputChan             chan *sarama.ProducerMessage
+	ErrorsChan            chan *sarama.ProducerError
 }
 
 func (t *MockAsyncProducer) AsyncClose() {
@@ -102,7 +103,7 @@ func (t *MockAsyncProducer) Successes() <-chan *sarama.ProducerMessage {
 }
 
 func (t *MockAsyncProducer) Errors() <-chan *sarama.ProducerError {
-	return nil
+	return t.ErrorsChan
 }
 
 func (t *MockAsyncProducer) IsTransactional() bool {

@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/IBM/sarama"
+	"github.com/google/uuid"
 	"github.com/violetpay-org/queue-streamer/common"
 	"sync"
 	"time"
 )
-
-var transactionalId int32 = 0
-var mutex = &sync.Mutex{}
 
 // StreamConsumer is a consumer that consumes messages from a Kafka topic and produces them to other topics.
 // It implements the sarama.ConsumerGroupHandler interface.
@@ -63,10 +61,7 @@ func NewStreamConsumer(
 			pcfg.Producer.Transaction.ID = "streamer"
 		}
 
-		mutex.Lock()
-		defer mutex.Unlock()
-		pcfg.Producer.Transaction.ID = pcfg.Producer.Transaction.ID + fmt.Sprintf("-%d", transactionalId)
-		transactionalId++
+		pcfg.Producer.Transaction.ID = fmt.Sprintf("%s-%s", pcfg.Producer.Transaction.ID, uuid.New())
 
 		return pcfg
 	}
