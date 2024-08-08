@@ -3,10 +3,11 @@ package qstreamer
 import (
 	"context"
 	"errors"
+	"sync"
+
 	"github.com/IBM/sarama"
 	"github.com/violetpay-org/queue-streamer/common"
 	"github.com/violetpay-org/queue-streamer/internal"
-	"sync"
 )
 
 // TopicStreamer is a streamer that streams messages from a topic to other topics.
@@ -17,7 +18,7 @@ type TopicStreamer struct {
 	mutex   *sync.Mutex
 	groupId string
 
-	consumer *internal.StreamConsumer
+	consumer internal.IStreamConsumer
 }
 
 // NewTopicStreamer creates a new topic streamer that streams messages from a topic to other topics.
@@ -72,7 +73,7 @@ func (ts *TopicStreamer) Topic() common.Topic {
 	return ts.topic
 }
 
-func (ts *TopicStreamer) Consumer() *internal.StreamConsumer {
+func (ts *TopicStreamer) Consumer() internal.IStreamConsumer {
 	return ts.consumer
 }
 

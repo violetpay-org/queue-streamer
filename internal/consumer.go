@@ -4,12 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
 	"github.com/violetpay-org/queue-streamer/common"
-	"sync"
-	"time"
 )
+
+type IStreamConsumer interface {
+	sarama.ConsumerGroupHandler
+	AddDestination(dest common.Topic, serializer common.MessageSerializer)
+	Destinations() []common.Topic
+	MessageSerializers() []common.MessageSerializer
+	ProducerPool() *ProducerPool
+	StartAsGroup(ctx context.Context, handler sarama.ConsumerGroupHandler)
+	StartAsGroupSelf(ctx context.Context)
+	CloseGroup()
+}
 
 // StreamConsumer is a consumer that consumes messages from a Kafka topic and produces them to other topics.
 // It implements the sarama.ConsumerGroupHandler interface.
@@ -34,7 +46,7 @@ func (consumer *StreamConsumer) ProducerPool() *ProducerPool {
 func NewStreamConsumer(
 	origin common.Topic, groupId string,
 	brokers []string, config *sarama.Config, producerConfig *sarama.Config,
-) *StreamConsumer {
+) IStreamConsumer {
 	if config == nil {
 		config = sarama.NewConfig()
 	}
@@ -95,20 +107,20 @@ func (consumer *StreamConsumer) MessageSerializers() []common.MessageSerializer 
 }
 
 func (consumer *StreamConsumer) startAsGroup(ctx context.Context, handler sarama.ConsumerGroupHandler) {
-	client, err := sarama.NewConsumerGroup(consumer.brokers, consumer.groupId, consumer.config)
+	consumerGroup, err := sarama.NewConsumerGroup(consumer.brokers, consumer.groupId, consumer.config)
 	if err != nil {
 		panic(err)
 	}
 
 	consumer.groupMutex.Lock()
-	consumer.consumerGroup = client
+	consumer.consumerGroup = consumerGroup
 	consumer.groupMutex.Unlock()
 
 	for {
 		// `Consume` should be called inside an infinite loop, when a
-		// server-side rebalance happens, the consumer session will need to be
+		// server-side rebalance happens, the consumer session should be
 		// recreated to get the new claims
-		if err := client.Consume(ctx, []string{consumer.origin.Name}, handler); err != nil {
+		if err := consumerGroup.Consume(ctx, []string{consumer.origin.Name}, handler); err != nil {
 			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 				return
 			}
@@ -151,6 +163,11 @@ func (consumer *StreamConsumer) Cleanup(session sarama.ConsumerGroupSession) err
 // NOTE: This must not be called within a goroutine, already handled as goroutines by sarama.
 func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	fmt.Println("Message consumer: starting to consume messages")
+	transactionMaker := NewRetriableTransactionMaker(
+		session,
+		consumer.groupId,
+	)
+
 	for {
 		select {
 		case msg, ok := <-claim.Messages():
@@ -168,89 +185,16 @@ func (consumer *StreamConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 				producer := consumer.producerPool.Take(topic)
 				defer consumer.producerPool.Return(producer, topic)
 
-				consumer.Transaction(producer, msg, session)
+				transactionMaker.AsyncTransact(
+					producer,
+					msg,
+					consumer.dests,
+					consumer.mss,
+				)
 			}()
 
 		case <-session.Context().Done():
 			return nil
-		}
-	}
-}
-
-func (consumer *StreamConsumer) Transaction(producer sarama.AsyncProducer, message *sarama.ConsumerMessage, session sarama.ConsumerGroupSession) {
-	err := producer.BeginTxn()
-	if err != nil {
-		fmt.Println("Error starting transaction:", err)
-		consumer.handleTxnError(producer, message, session, err, func() error {
-			return producer.BeginTxn()
-		})
-		return
-	}
-
-	for i, destination := range consumer.dests {
-		// Produce the message
-		producer.Input() <- &sarama.ProducerMessage{
-			Topic: destination.Name,
-			Value: sarama.ByteEncoder(
-				consumer.mss[i].MessageToProduceMessage(string(message.Value)),
-			),
-		}
-
-		fmt.Println("Message produced:", destination.Name, message.Key, message.Value)
-	}
-
-	// Add the message to the transaction
-	err = producer.AddMessageToTxn(message, consumer.groupId, nil)
-	if err != nil {
-		fmt.Println("Error adding message to transaction:", err)
-		consumer.handleTxnError(producer, message, session, err, func() error {
-			return producer.AddMessageToTxn(message, consumer.groupId, nil)
-		})
-		return
-	}
-
-	// Commit the transaction
-	err = producer.CommitTxn()
-	if err != nil {
-		fmt.Println("Error committing transaction:", err)
-		consumer.handleTxnError(producer, message, session, err, func() error {
-			return producer.CommitTxn()
-		})
-		return
-	}
-
-	fmt.Println("Message claimed:", message.Topic, message.Partition, message.Offset)
-}
-
-// HandleTxnError handles transaction errors, this exported method is only for testing purposes.
-func (consumer *StreamConsumer) HandleTxnError(producer sarama.AsyncProducer, message *sarama.ConsumerMessage, session sarama.ConsumerGroupSession, err error, defaulthandler func() error) {
-	consumer.handleTxnError(producer, message, session, err, defaulthandler)
-}
-
-func (consumer *StreamConsumer) handleTxnError(producer sarama.AsyncProducer, message *sarama.ConsumerMessage, session sarama.ConsumerGroupSession, err error, defaulthandler func() error) {
-	fmt.Printf("Message consumer: unable to process transaction: %+v", err)
-	for {
-		if producer.TxnStatus()&sarama.ProducerTxnFlagFatalError != 0 {
-			// fatal error. need to recreate producer.
-			fmt.Println("Message consumer: producer is in a fatal state, need to recreate it")
-			// reset current consumer offset to retry consume this record.
-			session.ResetOffset(message.Topic, message.Partition, message.Offset, "")
-			return
-		}
-		if producer.TxnStatus()&sarama.ProducerTxnFlagAbortableError != 0 {
-			err = producer.AbortTxn()
-			if err != nil {
-				fmt.Printf("Message consumer: unable to abort transaction: %+v", err)
-				continue
-			}
-			// reset current consumer offset to retry consume this record.
-			session.ResetOffset(message.Topic, message.Partition, message.Offset, "")
-			return
-		}
-		// if not you can retry
-		err = defaulthandler()
-		if err == nil {
-			return
 		}
 	}
 }

@@ -43,7 +43,7 @@ func (ds *DirectStreamer) Topic() common.Topic {
 	return ds.ts.Topic()
 }
 
-func (ds *DirectStreamer) Consumer() *internal.StreamConsumer {
+func (ds *DirectStreamer) Consumer() internal.IStreamConsumer {
 	return ds.ts.Consumer()
 }
 
